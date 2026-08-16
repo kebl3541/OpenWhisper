@@ -1,17 +1,23 @@
 # OpenWhisper
 
 [![CI](https://github.com/kebl3541/OpenWhisper/actions/workflows/ci.yml/badge.svg)](https://github.com/kebl3541/OpenWhisper/actions/workflows/ci.yml)
+<!-- Uncomment once the repository is public — shields.io cannot see private repos:
 [![Downloads](https://img.shields.io/github/downloads/kebl3541/OpenWhisper/total?label=downloads)](https://github.com/kebl3541/OpenWhisper/releases)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/philosophizer)
+-->
 
-This is a hands-free dictation for macOS. No hotkeys, no
-tapping: it listens continuously (unless deactivated), transcribes on-device 
-with Apple's macOS 26 speech engine (`SpeechAnalyzer`/`SpeechTranscriber`), 
-types what you say into the focused text field, and can press Return for you. 
-Nothing ever leaves your Mac.
+Speak, and your words appear wherever your cursor is — a chat, an email, a
+document. OpenWhisper is hands-free dictation for macOS: no buttons to hold,
+no shortcuts to remember. It listens continuously (until you mute it),
+turns speech into text right on your Mac, types it into whatever you're
+writing, and in chat apps can even press Return for you. You control
+everything by voice — and if you'd rather press a key, there's an optional
+toggle hotkey in Settings.
 
-Apple Silicon, macOS 26+. MIT licensed. CI builds and tests every push on
-GitHub's `macos-26` runners.
+Everything runs on-device with Apple's built-in speech engine. No account,
+no cloud, no audio leaving your Mac. Apple Silicon, macOS 26+, MIT licensed;
+CI builds and tests every push on GitHub's `macos-26` runners.
+
+<a href="https://buymeacoffee.com/philosophizer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="46"></a>
 
 **Not a developer? Start with the [User Guide](docs/USER-GUIDE.md)** —
 installation, the icon, every voice command, settings, and troubleshooting,
@@ -29,6 +35,9 @@ aren't.
 3. In **Claude** and **Perplexity (Comet)**, it presses Return automatically
    ~0.7 s after you stop talking. In every other app it only types — say
    **"send it"** to press Enter, or press it yourself.
+4. Mute and unmute by voice ("pause listening" / "start listening"), from
+   the menu, or with the optional **toggle hotkey** (Settings: ⌥ Space,
+   F18, and friends) for the moments a keypress is quicker.
 
 Filler sounds ("um", "uh", "ehm") are removed before typing. Turn this off in
 the menu if you want them verbatim.
