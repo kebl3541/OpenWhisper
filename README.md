@@ -11,8 +11,10 @@ OpenWhisper is hands-free dictation for macOS. There are no buttons to
 hold and no shortcuts to remember. It listens continuously (until you
 mute it), turns speech into text right on your Mac, types it into
 whatever you're writing, and in chat apps can even press Return for you.
-You control everything by voice, and if you'd rather press a key, there's
-an optional toggle hotkey.
+You control everything by voice. And if always-on isn't your style, it
+also works as a classic press-a-key dictation tool: an optional hotkey
+mutes and unmutes, and you can keep Return in your own hands (see
+"Hands-free is optional" below).
 
 Everything runs on-device with Apple's built-in speech engine. No account,
 no cloud, no audio leaving your Mac.
@@ -99,6 +101,23 @@ Things worth knowing:
   front window, OpenWhisper types nothing at all.
 - **Talking to people in the room?** Say **"pause listening"** first,
   otherwise the conversation becomes keystrokes wherever your cursor is.
+
+### Prefer keys and clicks? Hands-free is optional
+
+You can use OpenWhisper like a classic push-to-talk dictation tool
+instead of an always-on assistant:
+
+- Turn on **Launch muted** in Settings, so nothing is typed until you say
+  so.
+- Pick a **toggle hotkey** in Settings (⌥ Space, F18, and others). One
+  press unmutes, you dictate, one press mutes again.
+- Turn **Auto-send** off and press Return yourself when the text is
+  ready.
+- Everything the voice commands do is also in the menu: mute, unmute,
+  mic off, copy.
+
+In that setup the microphone only produces text between your two
+keypresses, and nothing is ever sent without you pressing Return.
 
 ## 5. Voice commands
 
