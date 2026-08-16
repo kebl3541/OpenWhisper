@@ -84,6 +84,12 @@ enum Defaults {
         get { d.string(forKey: "journalDir") }
         set { d.set(newValue, forKey: "journalDir") }
     }
+    /// Named toggle-listening hotkey ("None" disables). Voice stays primary;
+    /// this is for users who want a physical switch too.
+    static var hotkeyChoice: String {
+        get { d.string(forKey: "hotkeyChoice") ?? "F18" }
+        set { d.set(newValue, forKey: "hotkeyChoice") }
+    }
     /// Opt-in persistent, searchable history of everything dictated.
     static var historyEnabled: Bool {
         get { d.object(forKey: "historyEnabled") as? Bool ?? false }
@@ -794,6 +800,21 @@ enum TextProcessing {
         return best
     }
 
+    /// Carbon (keyCode, modifier mask) for a named hotkey choice; nil = off.
+    /// Numeric Carbon constants: cmd 0x100, shift 0x200, option 0x800,
+    /// control 0x1000; Space is keycode 49, D is 2, F18/F19 are 79/80.
+    static func hotkeySpec(_ choice: String) -> (code: UInt32, mods: UInt32)? {
+        switch choice {
+        case "F18": return (79, 0)
+        case "F19": return (80, 0)
+        case "⌥ Space": return (49, 0x800)
+        case "⌃⌥ Space": return (49, 0x1800)
+        case "⇧⌘ D": return (2, 0x300)
+        default: return nil
+        }
+    }
+    static let hotkeyChoices = ["None", "F18", "F19", "⌥ Space", "⌃⌥ Space", "⇧⌘ D"]
+
     /// Longest matching bundle-id prefix wins.
     static func profileValue(bundleID: String?, profiles: [String: Any]?, key: String) -> Any? {
         guard let bid = bundleID?.lowercased(), let profiles else { return nil }
@@ -881,6 +902,13 @@ func runSelfTests() -> Int {
            "profile: shorter prefix fallback")
     expect(T.profileValue(bundleID: "com.apple.dt.Xcode", profiles: profiles, key: "commitDelay") == nil,
            "profile: no match returns nil")
+
+    expect(T.hotkeySpec("F18")! == (79, 0), "hotkey: F18 plain")
+    expect(T.hotkeySpec("⌥ Space")! == (49, 0x800), "hotkey: option-space")
+    expect(T.hotkeySpec("⇧⌘ D")! == (2, 0x300), "hotkey: shift-cmd-D")
+    expect(T.hotkeySpec("None") == nil, "hotkey: none disables")
+    expect(T.hotkeyChoices.allSatisfy { $0 == "None" || T.hotkeySpec($0) != nil },
+           "hotkey: every offered choice resolves")
 
     print(failures == 0 ? "ALL TESTS PASSED" : "\(failures) TEST(S) FAILED")
     return failures
@@ -2064,6 +2092,14 @@ final class SettingsWindow: NSObject {
     }()
     private let primaryPopup = NSPopUpButton()
     private let secondaryPopup = NSPopUpButton()
+    private lazy var hotkeyPopup: NSPopUpButton = {
+        let p = NSPopUpButton()
+        p.addItems(withTitles: TextProcessing.hotkeyChoices)
+        p.selectItem(withTitle: Defaults.hotkeyChoice)
+        p.target = self
+        p.action = #selector(hotkeyChanged(_:))
+        return p
+    }()
     private lazy var prefixesField: NSTextField = {
         let tf = NSTextField(string: allowedTargetPrefixes().joined(separator: ", "))
         tf.target = self
@@ -2143,6 +2179,7 @@ final class SettingsWindow: NSObject {
         stack.addArrangedSubview(grid([
             [label("Auto-send pause"), commitSlider, commitLabel],
             [label("Voice threshold"), thresholdSlider, thresholdLabel],
+            [label("Toggle hotkey"), hotkeyPopup],
         ]))
         stack.addArrangedSubview(check("Auto-send (press Return after a pause)", key: "autoReturn", initial: Defaults.autoReturn))
         stack.addArrangedSubview(check("Type into any app", key: "anyApp", initial: Defaults.anyApp))
@@ -2268,6 +2305,10 @@ final class SettingsWindow: NSObject {
         wrongField.stringValue = ""
         rightField.stringValue = ""
         refreshCorrections()
+    }
+    @objc private func hotkeyChanged(_ p: NSPopUpButton) {
+        Defaults.hotkeyChoice = p.titleOfSelectedItem ?? "None"
+        AppDelegate.shared?.reregisterHotkey()
     }
     @objc private func openHistory() { HistoryWindow.shared.show() }
 }
@@ -2406,20 +2447,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var hotkeyRef: EventHotKeyRef?
 
-    /// Optional global hotkey: F18 toggles listen mute from anywhere (handy
-    /// for macro pads and keyboards with spare keys).
-    private func registerMacropadHotkey() {
+    /// Optional global hotkey that toggles listening — voice stays primary,
+    /// this is for users who want a physical switch too. Configurable in
+    /// Settings; F18 by default (absent from regular keyboards, so it's
+    /// harmless until someone with a macro pad or full-size board wants it).
+    private func installHotkeyHandler() {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                  eventKind: UInt32(kEventHotKeyPressed))
         InstallEventHandler(GetEventDispatcherTarget(), { _, _, _ in
             DispatchQueue.main.async {
                 AppDelegate.shared?.controller.toggleMute()
-                DLog.log("F18 hotkey: listen toggle")
+                DLog.log("hotkey: listen toggle")
             }
             return noErr
         }, 1, &spec, nil, nil)
-        RegisterEventHotKey(UInt32(kVK_F18), 0,
-                            EventHotKeyID(signature: OSType(0x54544B31), id: 1),
+    }
+
+    func reregisterHotkey() {
+        if let ref = hotkeyRef {
+            UnregisterEventHotKey(ref)
+            hotkeyRef = nil
+        }
+        guard let spec = TextProcessing.hotkeySpec(Defaults.hotkeyChoice) else { return }
+        RegisterEventHotKey(spec.code, spec.mods,
+                            EventHotKeyID(signature: OSType(0x4F575031), id: 1),
                             GetEventDispatcherTarget(), 0, &hotkeyRef)
     }
 
@@ -2433,7 +2484,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         controller.onStateChange = { [weak self] in self?.refreshUI() }
         refreshUI()
-        registerMacropadHotkey()
+        installHotkeyHandler()
+        reregisterHotkey()
         Task { await controller.start() }
         let t = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshIcon() }

@@ -171,6 +171,10 @@ Open **Settings…** from the menu. Everything takes effect immediately.
 - **Auto-send apps** — the technical list behind "Auto-send in ⟨App⟩".
   Easier to manage from the menu toggle.
 - **Personal dictionary** — see and edit your "replace X with Y" rules.
+- **Toggle hotkey** — an optional keyboard shortcut that mutes/unmutes,
+  for when pressing a key is quicker than speaking. Pick ⌥ Space,
+  ⌃⌥ Space, ⇧⌘ D, F18/F19, or None. Voice control always works
+  regardless.
 - **Launch muted** — start each session silent until you say
   "start listening". Nice if you share your space.
 - **Keep searchable history** — remember everything you dictate in a

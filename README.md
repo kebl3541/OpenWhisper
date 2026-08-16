@@ -118,7 +118,8 @@ runs while voice is detected, cutting idle battery use.
   timestamp. Opt-in: it writes spoken text to disk.
 - **Settings…** — a native settings window: pause and voice-threshold
   sliders, language pickers (change either language live, no restart),
-  auto-send app list, personal-dictionary editor, privacy toggles.
+  an optional mute-toggle hotkey (⌥ Space, F18, …), auto-send app list,
+  personal-dictionary editor, privacy toggles.
 - **History…** — opt-in searchable history of everything you dictated
   (off by default; enable in Settings). Search, copy, clear.
 - **Copy Last Utterance**, **Start at Login**, **Quit**.
