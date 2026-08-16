@@ -4,11 +4,11 @@
 [![Downloads](https://img.shields.io/github/downloads/kebl3541/OpenWhisper/total?label=downloads)](https://github.com/kebl3541/OpenWhisper/releases)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/philosophizer)
 
-Hands-free dictation for macOS (formerly *Talk to Claude*). No hotkeys, no
-tapping: it listens continuously, transcribes on-device with Apple's macOS 26
-speech engine (`SpeechAnalyzer`/`SpeechTranscriber`), types what you say into
-the focused text field, and can press Return for you. Nothing ever leaves
-your Mac.
+This is a hands-free dictation for macOS. No hotkeys, no
+tapping: it listens continuously (unless deactivated), transcribes on-device 
+with Apple's macOS 26 speech engine (`SpeechAnalyzer`/`SpeechTranscriber`), 
+types what you say into the focused text field, and can press Return for you. 
+Nothing ever leaves your Mac.
 
 Apple Silicon, macOS 26+. MIT licensed. CI builds and tests every push on
 GitHub's `macos-26` runners.
