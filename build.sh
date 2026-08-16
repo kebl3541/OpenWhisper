@@ -9,7 +9,8 @@ swiftc -O -parse-as-library -target arm64-apple-macos26.0 Sources/*.swift -o Ope
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Info.plist "$APP/Contents/Info.plist"
-cp docs/USER-GUIDE.md "$APP/Contents/Resources/USER-GUIDE.md"
+# The README is the user guide; bundle it so the welcome dialog can open it.
+cp README.md "$APP/Contents/Resources/USER-GUIDE.md"
 cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 mv OpenWhisper "$APP/Contents/MacOS/OpenWhisper"
 # A stable self-signed cert keeps TCC grants (mic/accessibility) across

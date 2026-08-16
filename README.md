@@ -1,269 +1,246 @@
 # OpenWhisper
 
 [![CI](https://github.com/kebl3541/OpenWhisper/actions/workflows/ci.yml/badge.svg)](https://github.com/kebl3541/OpenWhisper/actions/workflows/ci.yml)
-<!-- Uncomment once the repository is public — shields.io cannot see private repos:
+<!-- Uncomment once the repository is public. shields.io cannot see private repos:
 [![Downloads](https://img.shields.io/github/downloads/kebl3541/OpenWhisper/total?label=downloads)](https://github.com/kebl3541/OpenWhisper/releases)
 -->
 
 Speak, and your words appear wherever your cursor is: a chat, an email, a
-document, an AI chatbot...anywhere! 
+document, an AI chatbot... anywhere!
 
-OpenWhisper is hands-free dictation for macOS: no buttons to hold,
-no shortcuts to remember. It listens continuously (until you mute it),
-turns speech into text right on your Mac, types it into whatever you're
-writing, and in chat apps can even press Return for you. You control
-everything by voice — and if you'd rather press a key, there's an optional
-toggle hotkey in Settings.
+OpenWhisper is hands-free dictation for macOS. There are no buttons to
+hold and no shortcuts to remember. It listens continuously (until you
+mute it), turns speech into text right on your Mac, types it into
+whatever you're writing, and in chat apps can even press Return for you.
+You control everything by voice, and if you'd rather press a key, there's
+an optional toggle hotkey.
 
 Everything runs on-device with Apple's built-in speech engine. No account,
-no cloud, no audio leaving your Mac. Apple Silicon, macOS 26+, MIT licensed;
-CI builds and tests every push on GitHub's `macos-26` runners.
+no cloud, no audio leaving your Mac.
 
 <a href="https://buymeacoffee.com/philosophizer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="46"></a>
 
-**Not a developer? Start with the [User Guide](docs/USER-GUIDE.md)** —
-installation, the icon, every voice command, settings, and troubleshooting,
-in plain language. Contributors: read [ARCHITECTURE.md](ARCHITECTURE.md)
-first — it documents the concurrency invariants that look simplifiable but
-aren't.
+**Developers:** [TECHNICAL.md](TECHNICAL.md) covers building, tuning, and
+design; [ARCHITECTURE.md](ARCHITECTURE.md) covers the code.
 
-## How it works
+---
 
-1. The app sits in the menu bar (waveform icon) and listens all the time.
-   The icon is **green** while listening, **red** while it hears you speak,
-   **orange** when muted, grey when the mic is off.
-2. Put the cursor in any text field and speak. As phrases finalize, the words
-   are typed at the cursor.
-3. In **Claude** and **Perplexity (Comet)**, it presses Return automatically
-   ~0.7 s after you stop talking. In every other app it only types — say
-   **"send it"** to press Enter, or press it yourself.
-4. Mute and unmute by voice ("pause listening" / "start listening"), from
-   the menu, or with the optional **toggle hotkey** (Settings: ⌥ Space,
-   F18, and friends) for the moments a keypress is quicker.
+## 1. Installing
 
-Filler sounds ("um", "uh", "ehm") are removed before typing. Turn this off in
-the menu if you want them verbatim.
+**If you downloaded a release (OpenWhisper-vX.X.zip):**
 
-## Which menu bar icon is OpenWhisper?
+1. Double-click the zip to unpack it. You get `OpenWhisper.app`.
+2. Drag `OpenWhisper.app` into your **Applications** folder.
+3. First open only: **right-click** the app and choose **Open**, then
+   confirm. OpenWhisper isn't in Apple's paid developer program yet, so
+   macOS shows an extra warning the first time. This is expected.
 
-OpenWhisper is the **waveform** icon. The separate **microphone icon** that
-appears nearby is **macOS itself**, not this app: whenever any app records
-audio, macOS shows its own mic-in-use privacy indicator. Clicking it shows
-which app is using the microphone (OpenWhisper, while listening) plus
-system audio features such as Mic Modes (Voice Isolation, Wide Spectrum).
-Those controls belong to macOS and appear for every recording app — Zoom,
-FaceTime, anything. OpenWhisper deliberately uses a waveform glyph so the
-two are never confused.
-
-## Automatic bilingual dictation (opt-in)
-
-Pick a secondary language in **Settings** and two speech engines run in
-parallel: every utterance goes to whichever one was acoustically confident
-(`.transcriptionConfidence` — the wrong-language engine emits plausible
-words but *knows* it's guessing, typically 0.2 vs 0.95). No language
-commands: speak either language, sentence by sentence. Mixing languages
-inside a single utterance is not supported (one engine wins per utterance).
-
-Off by default because the second engine has real costs: audio is fed
-continuously (the battery saver only works single-language) and commits
-wait briefly for the slower engine. Turn it on when you actually dictate in
-two languages; switching either language in Settings takes effect live.
+If macOS refuses to open it at all, open the **Terminal** app, paste this
+line, and press Return:
 
 ```
-defaults write io.github.kebl3541.openwhisper dualLanguage -bool true    # or use Settings
-defaults write io.github.kebl3541.openwhisper secondaryLocale it-IT
+xattr -dr com.apple.quarantine /Applications/OpenWhisper.app
 ```
 
-Hard-won implementation notes: the two engines finalize at different speeds,
-so commits wait for the slower one (up to 0.9s, or 3s when the lone
-transcript is garble-quality); sessions are long-lived because rebuilding
-them per message created a dead window that swallowed rapid follow-up
-messages; and the VAD battery-saver is bypassed in dual mode because the
-Italian engine needs continuous silence audio to finalize on time.
+Then open the app normally. You only ever do this once.
 
-## Voice commands (say as a standalone phrase)
+**Requirements:** a Mac with Apple Silicon (any MacBook/iMac/Mac mini from
+2021 or later) running macOS 26 or newer.
 
-- **"Hey Claude"** — from anywhere (any app, even while muted): brings the
-  Claude app to the front and unmutes. Words in the same breath carry over:
-  "Hey Claude, summarize this" opens Claude and types "summarize this".
-  Needs the greeting word — a sentence merely starting with "Claude…" won't
-  trigger it. "Hi/Okay Claude" work too.
+## 2. First launch: two permissions
 
-- **"pause listening"** / "stop dictation" — mute. Types nothing anywhere;
-  only listens for the wake phrase. Icon turns orange, low *bottle* sound.
-- **"start listening"** / "resume dictation" — unmute (*pop* sound).
-- **"send it"** / "send" / "send now" / "press enter" — press Return immediately.
-- **"read it to me"** / "read this" — reads the frontmost window's text aloud
-  (works in any app: Claude, Perplexity, a webpage). **"stop"** / "stop
-  reading" halts it. While it reads, your speech isn't typed (no feedback
-  loops).
-- **"scratch that"** / "delete that" / "undo" — deletes the last phrase it
-  typed, so you can re-say it.
-- **"new line"** / **"new paragraph"** — inserts line breaks (Shift+Return,
-  so chats don't send).
-- **"replace X with Y"** — permanent transcription correction (e.g. "replace
-  madre with marginally"). **"forget replacement X"** removes it.
-- **"talk mode on/off"** — read every answer aloud automatically after each
-  send, in whatever chat app you're using.
+OpenWhisper needs two permissions, and it will ask for both:
 
-Also: "stop" interrupts read-aloud instantly (no waiting for the phrase
-to finalize); dictation is suppressed while Zoom/Teams/FaceTime/Webex is
-frontmost so meetings never get typed anywhere; and the speech engine only
-runs while voice is detected, cutting idle battery use.
-- Optionally prefix with "Claude": "Claude, pause listening".
+1. **Microphone**, so it can hear you. Click **Allow** when asked.
+2. **Accessibility**, which is what lets it *type* into other apps. macOS
+   sends you to **System Settings → Privacy & Security → Accessibility**;
+   turn the switch next to OpenWhisper **on**.
 
-## Menu options
+Without the first it can't hear; without the second it hears you but
+can't type. If you ever see the menu warn "Grant Accessibility Access",
+click it and turn the switch on.
 
-- **Mute / Unmute** — same as the voice commands.
-- **Turn Mic Off Completely** — releases the microphone entirely.
-- **Auto-send** (on) — Return after a pause (Claude/Perplexity only).
-- **Type into any app** (on) — dictate into any focused text field. Turn off
-  to restrict typing to Claude/Perplexity too.
-- **Insert via clipboard paste** — compatibility mode for apps that ignore
-  synthetic keystrokes.
-- **Remove filler words** (on) — strips um/uh/ehm-type sounds before typing.
-- **Recent Utterances** — the last 10 things you dictated; click one to copy
-  it. Kept in memory only, never written to disk.
-- **Auto-send in <current app>** — one click adds or removes the app you're
-  in from the auto-send allowlist. No terminal needed.
-- **Journal dictations to Markdown…** (off) — pick a folder and every
-  committed phrase is appended to a daily `YYYY-MM-DD.md` file with a
-  timestamp. Opt-in: it writes spoken text to disk.
-- **Settings…** — a native settings window: pause and voice-threshold
-  sliders, language pickers (change either language live, no restart),
-  an optional mute-toggle hotkey (⌥ Space, F18, …), auto-send app list,
-  personal-dictionary editor, privacy toggles.
-- **History…** — opt-in searchable history of everything you dictated
-  (off by default; enable in Settings). Search, copy, clear.
-- **Copy Last Utterance**, **Start at Login**, **Quit**.
+The first launch also downloads Apple's speech model for your language
+(a one-time download handled by macOS itself).
 
-"Scratch that" only deletes in the app the text was actually typed into —
-switching apps and saying it won't backspace into your editor.
+## 3. Reading the icon
 
-## Design principles
+The waveform icon in the menu bar (the strip at the top of your screen)
+tells you at a glance what's happening:
 
-- **Zero-button by design.** Most dictation tools are hotkey or
-  push-to-talk driven. OpenWhisper never asks for a keypress: it listens
-  continuously and everything — muting, sending, deleting, language — is a
-  voice command. Built for when your hands aren't on the keyboard at all.
-- **Apple's on-device engine.** OpenWhisper uses macOS 26's built-in
-  `SpeechAnalyzer`/`SpeechTranscriber` — no model downloads, no bundled
-  inference runtime, a single small binary.
-- **Streaming, not record-then-transcribe.** Words are typed as phrases
-  finalize while you're still talking, and auto-Return sends them — a full
-  conversation loop, not a dictation drop.
-- **Per-utterance bilingual auto-detection**, chat-aware auto-send,
-  read-answers-aloud talk mode, and a wake phrase ("Hey Claude").
-- **Kind to your clipboard**: paste-mode insertion restores what you had
-  copied, and nothing is ever stashed to the clipboard without opt-in.
-- **Tested and CI-built**: the text-processing core (commands, fillers,
-  corrections, wake phrase) runs a self-test suite on every push.
-- **No LLM rewriting.** Cleanup is deliberately rule-based and local
-  (filler stripping, your personal dictionary). You're usually dictating
-  into an AI chat anyway — the intelligence sits on the other side of the
-  text box.
+| Icon | Meaning |
+|------|---------|
+| 🟢 Green waveform | Listening. Speak and it types. |
+| 🔴 Red filled waveform | Hearing your voice right now. |
+| 🟠 Orange waveform with a slash | **Muted.** Hears only "start listening" and "Hey Claude". |
+| Grey waveform with a slash | Microphone fully off. |
+| Hourglass / arrow | Starting up or downloading the speech model. |
 
-## Current tuning
+You may also see a **separate orange microphone icon** in the menu bar.
+That one belongs to **macOS**, not OpenWhisper; the system shows it
+whenever *any* app is using the microphone. It appears for Zoom and
+FaceTime too.
 
-Set live via `defaults`; the app reads most of these continuously.
+## 4. Dictating
 
-```
-defaults write io.github.kebl3541.openwhisper commitDelay -float 0.7    # silence before auto-Return
-defaults write io.github.kebl3541.openwhisper locale en-GB              # speech model (restart app)
-defaults write io.github.kebl3541.openwhisper anyApp -bool true         # type into any app
-defaults write io.github.kebl3541.openwhisper voiceThreshold -float 0.012
-defaults write io.github.kebl3541.openwhisper removeFillers -bool false # keep um/uh verbatim
-defaults write io.github.kebl3541.openwhisper wakeTargetPrefix com.example.   # app family "Hey Claude" activates
-defaults write io.github.kebl3541.openwhisper wakeTargetAppID com.example.app # exact app to launch if not running
-defaults write io.github.kebl3541.openwhisper startMuted -bool true     # launch muted until "start listening"
-defaults write io.github.kebl3541.openwhisper stashToClipboard -bool true # copy transcript when typing isn't possible
-defaults write io.github.kebl3541.openwhisper targetBundlePrefixes -array "com.anthropic." "ai.perplexity."
-```
+1. Click into any text box so the cursor is blinking there.
+2. Speak normally, in sentences.
+3. Your words are typed at the cursor as each phrase completes.
 
-`targetBundlePrefixes` controls which apps get auto-Return (and typing, when
-any-app mode is off). Almost everything above is also in **Settings…** in
-the menu — the terminal is optional.
+Things worth knowing:
 
-Per-app overrides (e.g. a slower auto-send in one chat app):
+- **In Claude and Perplexity**, OpenWhisper presses Return for you about a
+  second after you stop talking, making the conversation fully hands-free.
+  In every other app it only types; say **"send it"** when you want Return
+  pressed.
+- **The cursor is everything.** OpenWhisper types "blind" at the cursor.
+  If no text box is focused, the words vanish. If the wrong window is
+  focused, they go there.
+- **Filler sounds are removed.** "Um", "uh", "ehm" never reach the page
+  (you can turn this off in Settings).
+- **Meetings are safe.** While Zoom, Teams, FaceTime, or Webex is the
+  front window, OpenWhisper types nothing at all.
+- **Talking to people in the room?** Say **"pause listening"** first,
+  otherwise the conversation becomes keystrokes wherever your cursor is.
 
-```
-defaults write io.github.kebl3541.openwhisper profileOverrides -dict \
-  com.anthropic. '{ commitDelay = 1.5; autoReturn = 1; }'
-```
+## 5. Voice commands
 
-The longest matching bundle-id prefix wins; unset keys fall back to the
-global values.
+Say these as their own short phrase (a pause before and after helps).
+Add "Claude" in front if you like: "Claude, pause listening."
 
-## Security & privacy
+**Control**
 
-Design rules the code holds itself to:
+| Say | What happens |
+|-----|--------------|
+| "pause listening" / "stop dictation" | Mute. Nothing is typed anywhere. Icon turns orange. |
+| "start listening" / "resume dictation" | Unmute. |
+| "send it" / "send now" / "press enter" | Presses Return immediately, in any app. |
+| "scratch that" / "delete that" / "undo" | Deletes the last phrase it typed so you can re-say it. |
+| "new line" / "new paragraph" | Line break without sending (Shift+Return). |
 
-- **Everything on-device.** The app makes no network connections. The only
-  download ever performed is Apple's speech model, fetched by macOS itself.
-- **The debug log never contains spoken words** — event names, lengths, and
-  permission states only. Recent Utterances and captions live in memory.
-  The opt-in journal is the single feature that writes speech to disk.
-- **"Turn Mic Off Completely" releases the microphone** — the capture
-  session is stopped, and the system mic indicator goes out.
-- **Your clipboard is yours.** Paste-mode insertion restores whatever you
-  had copied; falling back to the clipboard when typing isn't possible is
-  off unless you opt in (`stashToClipboard`).
-- **Typing targets are allowlisted by bundle id**, never by app name (an
-  app calling itself "Claude Helper" gets nothing).
+**Hands-free Claude**
 
-Things to understand before relying on it:
+| Say | What happens |
+|-----|--------------|
+| "Hey Claude, ⟨your question⟩" | Opens the Claude app, types your question, sends it. Works from anywhere, even while muted. "Hi Claude" and "Okay Claude" work too. |
+| "…read it to me" (at the end of a question) | Sends the question, then reads the answer aloud as it arrives. |
+| "talk mode on" / "talk mode off" | Read *every* answer aloud automatically. |
 
-- **The mic is always on by design.** Anyone in the room — or any audio your
-  Mac plays — can be transcribed, and "Hey Claude" has no speaker
-  verification: a podcast saying "Okay Claude, …" can activate the Claude
-  app and submit the rest of the sentence. If that risk matters to your
-  environment, run with `startMuted` and unmute by voice when you need it,
-  or keep Auto-send off.
-- **It types blind at the cursor.** Where the focus is when an utterance
-  commits is where the words go (dictation is suppressed while
-  Zoom/Teams/FaceTime/Webex is frontmost, and commands like "stop
-  listening" are obeyed rather than typed, even when the engines split them
-  across results).
+**Reading aloud**
 
-## Gotchas
+| Say | What happens |
+|-----|--------------|
+| "read it to me" / "read this" | Reads the front window's text aloud, in any app. |
+| "stop" / "stop reading" | Stops the voice instantly. |
 
-- It types "blind" at the cursor. If no text field is focused, keystrokes
-  vanish. Keep the cursor in the box you're dictating into.
-- With any-app mode on, room conversation becomes keystrokes wherever your
-  cursor is — say **"pause listening"** before talking to humans.
-- A short `commitDelay` can auto-send mid-thought when you pause. Raise it,
-  or turn Auto-send off and use "send it".
+**Fixing repeated mistakes**
 
-## Build
+| Say | What happens |
+|-----|--------------|
+| "replace ⟨wrong⟩ with ⟨right⟩" | From now on, whenever it hears ⟨wrong⟩ it types ⟨right⟩. |
+| "forget replacement ⟨wrong⟩" | Removes that rule. |
 
-```
-./build.sh
-open OpenWhisper.app
-```
+**Microphone**
 
-Requires Xcode on macOS 26+ (Apple Silicon). Run the logic test suite (this
-is what CI runs):
+| Say | What happens |
+|-----|--------------|
+| "headphone mic" | Use your headphones' microphone. |
+| "mac mic" / "apple mic" | Use the Mac's built-in microphone (recommended). |
 
-```
-./OpenWhisper.app/Contents/MacOS/OpenWhisper --selftest
-```
+## 6. The menu
 
-End-to-end transcription check without a microphone:
+Click the waveform icon:
 
-```
-say -v Samantha -o /tmp/t.aiff "testing one two three"
-./OpenWhisper.app/Contents/MacOS/OpenWhisper --transcribe /tmp/t.aiff
-```
+- **Mute / Unmute**: same as the voice commands.
+- **Turn Mic Off Completely**: releases the microphone entirely (the
+  system's orange mic indicator goes out).
+- **Auto-send**: whether Return is pressed after you pause.
+- **Type into any app**: on means dictate anywhere; off restricts typing
+  to your allowed apps (Claude and Perplexity by default).
+- **Auto-send in ⟨App⟩**: one click adds or removes the app you're
+  currently in from the allowed list.
+- **Remove filler words**: the um/uh cleaner.
+- **Journal dictations to Markdown…**: optionally save everything you
+  dictate into daily text files in a folder you choose.
+- **Recent Utterances**: your last 10 phrases; click one to copy it.
+- **Settings…**: see below.
+- **History…**: appears if you enabled history in Settings.
+- **Start at Login**: start OpenWhisper automatically when you log in.
 
-Debug log: `~/Library/Application Support/OpenWhisper/openwhisper.log` —
-events and permission states only; it never contains the words you speak.
+## 7. Settings
 
-The app is signed with a local self-signed certificate so the mic and
-Accessibility grants survive rebuilds. If you build unsigned (ad-hoc), the
-Accessibility grant goes stale after every rebuild (toggle shows ON but
-doesn't apply). Fix:
+Open **Settings…** from the menu. Everything takes effect immediately.
 
-```
-tccutil reset Accessibility io.github.kebl3541.openwhisper
-open OpenWhisper.app   # then re-enable in System Settings → Accessibility
-```
+- **Auto-send pause**: how long a silence before your message is sent.
+  If messages send while you're still thinking, drag it right.
+- **Voice threshold**: how loud a sound must be to count as speech. If
+  it types the television, drag right; if it misses your quiet voice,
+  drag left.
+- **Toggle hotkey**: an optional keyboard shortcut that mutes and
+  unmutes, for when pressing a key is quicker than speaking. Pick
+  ⌥ Space, ⌃⌥ Space, ⇧⌘ D, F18/F19, or None. Voice control always works
+  regardless.
+- **Languages**: your main dictation language, and optionally a second
+  one. With a second language set, you switch languages just by speaking;
+  each sentence goes to the language it was spoken in, no command needed.
+  (Off by default because it uses more battery.)
+- **Auto-send apps**: the technical list behind "Auto-send in ⟨App⟩".
+- **Personal dictionary**: see and edit your "replace X with Y" rules.
+- **Launch muted**: start each session silent until you say
+  "start listening". Nice if you share your space.
+- **Keep searchable history**: remember everything you dictate in a
+  local file, searchable from **History…**. Off by default.
+
+## 8. Your privacy
+
+- Speech recognition runs entirely on your Mac. No account, no cloud, no
+  network connection.
+- OpenWhisper's own log file records only events ("typed 42 characters"),
+  never your words.
+- Two features write your spoken words to disk, **both off until you turn
+  them on**: the journal and the history. Both are plain local files you
+  can open, search, and delete yourself.
+- One honest caution: the microphone is always on by design, and the "Hey
+  Claude" phrase has no voice recognition. Audio playing near your Mac
+  (a video, a speakerphone call) could trigger it. If that matters in
+  your environment, use **Launch muted** or "Turn Mic Off Completely".
+
+## 9. When something's wrong
+
+**It's not typing anything.**
+Check the icon: orange means muted (say "start listening"); grey means the
+mic is off (menu → Turn Mic Back On). Green but nothing appears? Make sure
+a text box is focused and the cursor is blinking. Still nothing: the menu
+will show **⚠️ Grant Accessibility Access** if macOS revoked the typing
+permission. Click it and re-enable.
+
+**It sends my message before I've finished the thought.**
+Settings → drag **Auto-send pause** right. Or turn **Auto-send** off and
+say "send it" when you're ready.
+
+**It types what the TV / my colleagues say.**
+Say "pause listening" when you're not dictating, raise the **Voice
+threshold**, or enable **Launch muted**.
+
+**It keeps mishearing a word.**
+Say "replace ⟨what it typed⟩ with ⟨what you meant⟩". The rule is permanent
+and editable later in Settings.
+
+**I can't find the icon.**
+A crowded menu bar (especially on Macs with a notch) hides icons. Hold
+⌘ and drag other menu bar icons off to make room.
+
+**My headphones made the audio sound terrible.**
+Bluetooth headphone mics force phone-quality audio. Say "mac mic" to use
+the built-in microphone; your headphones keep playing full-quality sound.
+
+**The words went into the wrong window.**
+The cursor moved before the phrase finished. "Scratch that" deletes the
+last phrase, but only if you're still in the app it was typed into.
+
+---
+
+*OpenWhisper is open source under the MIT license. Developers: see
+[TECHNICAL.md](TECHNICAL.md) and [ARCHITECTURE.md](ARCHITECTURE.md). If it
+saves your hands some typing, you can
+[buy me a coffee](https://buymeacoffee.com/philosophizer).*
