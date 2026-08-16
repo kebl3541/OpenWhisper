@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>OpenWhisper</string>
+	<key>CFBundleDisplayName</key>
+	<string>OpenWhisper</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.kebl3541.openwhisper</string>
+	<key>CFBundleExecutable</key>
+	<string>OpenWhisper</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.2</string>
+	<key>CFBundleVersion</key>
+	<string>3</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>OpenWhisper listens to your voice and transcribes it on-device so you can dictate hands-free. Nothing leaves your Mac.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>All transcription happens on-device. Nothing is sent anywhere.</string>
+</dict>
+</plist>

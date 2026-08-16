@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    # macOS 26 image: ships the Xcode 26 toolchain with the SpeechAnalyzer SDK.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swiftc --version
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Self tests (pure logic)
+        run: ./OpenWhisper.app/Contents/MacOS/OpenWhisper --selftest
+
+      - name: Bundle sanity
+        run: |
+          test -x OpenWhisper.app/Contents/MacOS/OpenWhisper
+          plutil -lint OpenWhisper.app/Contents/Info.plist
+          codesign --verify --verbose=2 OpenWhisper.app

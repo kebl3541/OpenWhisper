@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Self tests
+        run: ./OpenWhisper.app/Contents/MacOS/OpenWhisper --selftest
+
+      - name: Zip app
+        run: ditto -c -k --keepParent OpenWhisper.app "OpenWhisper-${GITHUB_REF_NAME//\//-}.zip"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: OpenWhisper-*.zip
+          generate_release_notes: true
+          body: |
+            Unsigned build (no paid Apple Developer ID yet). After unzipping,
+            clear the quarantine flag before first launch:
+
+            ```
+            xattr -dr com.apple.quarantine OpenWhisper.app
+            ```
