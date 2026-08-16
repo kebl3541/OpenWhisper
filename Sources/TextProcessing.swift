@@ -236,6 +236,81 @@ enum TextProcessing {
     }
     static let hotkeyChoices = ["None", "F18", "F19", "⌥ Space", "⌃⌥ Space", "⇧⌘ D"]
 
+    /// One engine's accumulated finals for the current utterance.
+    struct UtteranceBuffer: Equatable {
+        var text = ""
+        var confSum = 0.0
+        var confWeight = 0.0
+        var sawSpeech = false
+        var isEmpty: Bool { text.isEmpty }
+        /// Per-character weighted mean; nil when the engine reported none.
+        var meanConfidence: Double? { confWeight > 0 ? confSum / confWeight : nil }
+        mutating func add(_ piece: String, confidence: Double) {
+            text += (text.isEmpty ? "" : " ") + piece
+            if confidence >= 0 {
+                confSum += confidence * Double(piece.count)
+                confWeight += Double(piece.count)
+            }
+        }
+        mutating func clear() { self = UtteranceBuffer() }
+    }
+
+    enum CommitAction: Equatable { case wait, commit, rotateIdle, rotateWatchdog }
+
+    /// The commit gating. Every constant here was tuned against live
+    /// dictation failures — change them only with a test proving the old
+    /// scenario still passes:
+    /// - the slower engine's final can trail by ~1s, so wait 0.9s for it,
+    ///   but only if that engine actually heard speech;
+    /// - a lone LOW-confidence transcript is probably the other language
+    ///   misheard, so wait 3s for the second engine to rescue it;
+    /// - short garble scores deceptively high confidence, so short lone
+    ///   transcripts need a higher bar (0.75 vs 0.5) before we trust them.
+    static func commitDecision(now: Date,
+                               lastVoiceAt: Date,
+                               lastFinalAt: Date,
+                               lastResultAt: Date,
+                               sessionStartedAt: Date,
+                               pending: Bool,
+                               muted: Bool,
+                               volatileEmpty: Bool,
+                               commitDelay: Double,
+                               dual: Bool,
+                               primary: UtteranceBuffer,
+                               secondary: UtteranceBuffer) -> CommitAction {
+        let silentFor = now.timeIntervalSince(lastVoiceAt)
+        let sinceFinal = now.timeIntervalSince(lastFinalAt)
+        let bothReported = !dual || (!primary.isEmpty && !secondary.isEmpty)
+        let stillExpectingSecond = !bothReported && secondary.sawSpeech && secondary.isEmpty
+        let cPrimary = primary.meanConfidence ?? 1.0
+        let confBar = primary.text.count < 25 ? 0.75 : 0.5
+        let suspicious = dual && !bothReported && !primary.isEmpty && cPrimary < confBar
+        let slowModelGrace: Double = bothReported ? 0.2 : (suspicious ? 3.0 : (stillExpectingSecond ? 0.9 : 0.2))
+        if pending, !muted, silentFor > commitDelay, sinceFinal > slowModelGrace, volatileEmpty {
+            return .commit
+        }
+        if !pending, silentFor > 60, now.timeIntervalSince(sessionStartedAt) > 300 {
+            return .rotateIdle
+        }
+        if silentFor < 5,
+           now.timeIntervalSince(lastResultAt) > 15,
+           now.timeIntervalSince(sessionStartedAt) > 20 {
+            return .rotateWatchdog
+        }
+        return .wait
+    }
+
+    /// Confidence pick between the two engines' buffers. nil means neither
+    /// engine reported confidence — the caller should use its text-language
+    /// fallback. Assumes Apple's `.transcriptionConfidence` semantics: the
+    /// wrong-language engine emits plausible words but scores ~0.2 vs ~0.95.
+    static func pickUtterance(primary: UtteranceBuffer, secondary: UtteranceBuffer) -> String? {
+        if secondary.isEmpty { return primary.text }
+        if primary.isEmpty { return secondary.text }
+        guard let a = primary.meanConfidence, let b = secondary.meanConfidence else { return nil }
+        return b > a ? secondary.text : primary.text
+    }
+
     /// Longest matching bundle-id prefix wins.
     static func profileValue(bundleID: String?, profiles: [String: Any]?, key: String) -> Any? {
         guard let bid = bundleID?.lowercased(), let profiles else { return nil }
@@ -350,6 +425,73 @@ func runSelfTests() -> Int {
     expect(T.parseCommand("in inglese") == .languageEnglish, "cmd: english switch")
     expect(T.parseCommand("the weather is nice today") == nil, "cmd: ordinary speech is not a command")
     expect(T.parseCommand("send me the report tomorrow") == nil, "cmd: send inside a sentence is not a command")
+
+    // Commit-gating regression tests. Times are built from a fixed origin so
+    // the scenarios read as offsets in seconds.
+    let t0 = Date(timeIntervalSinceReferenceDate: 1_000_000)
+    func at(_ s: Double) -> Date { t0.addingTimeInterval(s) }
+    var full = T.UtteranceBuffer()
+    full.add("hello there everyone this is a test", confidence: 0.95)
+    var lowConf = T.UtteranceBuffer()
+    lowConf.add("garbled long transcript of something", confidence: 0.3)
+    var shortHigh = T.UtteranceBuffer()
+    shortHigh.add("ciao bella", confidence: 0.6)   // short: bar is 0.75
+    var heard = T.UtteranceBuffer()
+    heard.sawSpeech = true
+    let empty = T.UtteranceBuffer()
+
+    func decide(now: Double, final: Double = 0, voice: Double = 0, result: Double? = nil,
+                session: Double = -100, pending: Bool = true, muted: Bool = false,
+                volatileEmpty: Bool = true, dual: Bool = true,
+                primary: T.UtteranceBuffer, secondary: T.UtteranceBuffer) -> T.CommitAction {
+        T.commitDecision(now: at(now), lastVoiceAt: at(voice), lastFinalAt: at(final),
+                         lastResultAt: at(result ?? now), sessionStartedAt: at(session),
+                         pending: pending, muted: muted, volatileEmpty: volatileEmpty,
+                         commitDelay: 0.7, dual: dual, primary: primary, secondary: secondary)
+    }
+
+    expect(decide(now: 1.0, dual: false, primary: full, secondary: empty) == .commit,
+           "gate: single language commits after delay")
+    expect(decide(now: 0.5, dual: false, primary: full, secondary: empty) == .wait,
+           "gate: single language waits inside delay")
+    expect(decide(now: 1.0, primary: full, secondary: full) == .commit,
+           "gate: both engines reported -> short grace")
+    expect(decide(now: 0.8, primary: full, secondary: heard) == .wait,
+           "gate: second engine heard speech but silent -> waits 0.9s")
+    expect(decide(now: 1.5, primary: full, secondary: heard) == .commit,
+           "gate: 0.9s grace expires -> commit")
+    expect(decide(now: 1.5, primary: lowConf, secondary: empty) == .wait,
+           "gate: lone low-confidence transcript waits 3s for rescue")
+    expect(decide(now: 3.5, primary: lowConf, secondary: empty) == .commit,
+           "gate: rescue window expires -> commit")
+    expect(decide(now: 1.5, primary: shortHigh, secondary: empty) == .wait,
+           "gate: short transcript needs the higher confidence bar")
+    expect(decide(now: 1.0, muted: true, primary: full, secondary: full) == .wait,
+           "gate: muted never commits")
+    expect(decide(now: 1.0, volatileEmpty: false, primary: full, secondary: full) == .wait,
+           "gate: live volatile text blocks commit")
+    expect(decide(now: 61, voice: 0, session: -300, pending: false,
+                  primary: empty, secondary: empty) == .rotateIdle,
+           "gate: idle hygiene rotation after long silence")
+    expect(decide(now: 20, final: 0, voice: 18, result: 2, session: -5, pending: false,
+                  primary: empty, secondary: empty) == .rotateWatchdog,
+           "gate: watchdog rotates when voice present but engines mute")
+
+    var joined = T.UtteranceBuffer()
+    joined.add("hello", confidence: 1.0)
+    joined.add("world", confidence: 0.5)
+    expect(joined.text == "hello world", "buffer: finals join with spaces")
+    expect(abs((joined.meanConfidence ?? 0) - 0.75) < 0.001, "buffer: weighted mean confidence")
+    expect(T.pickUtterance(primary: full, secondary: lowConf) == full.text,
+           "pick: higher confidence wins")
+    expect(T.pickUtterance(primary: lowConf, secondary: full) == full.text,
+           "pick: higher confidence wins either side")
+    expect(T.pickUtterance(primary: full, secondary: empty) == full.text,
+           "pick: lone buffer wins by default")
+    var noConf = T.UtteranceBuffer()
+    noConf.add("something", confidence: -1)
+    expect(T.pickUtterance(primary: noConf, secondary: full) == nil,
+           "pick: missing confidence defers to language fallback")
     expect(T.hotkeyChoices.allSatisfy { $0 == "None" || T.hotkeySpec($0) != nil },
            "hotkey: every offered choice resolves")
 

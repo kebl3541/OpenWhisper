@@ -46,13 +46,8 @@ final class ListeningController {
     private var secondaryLocale: Locale?
     private var session2: AnalyzerSession?
     private var sessionToken2 = 0
-    private var bufPrimary = ""
-    private var bufSecondary = ""
-    private var confPrimarySum = 0.0
-    private var confPrimaryWeight = 0.0
-    private var confSecondarySum = 0.0
-    private var confSecondaryWeight = 0.0
-    private var secondarySawSpeech = false
+    private var primaryBuf = TextProcessing.UtteranceBuffer()
+    private var secondaryBuf = TextProcessing.UtteranceBuffer()
     private var engineRunning = false
     private var timer: Timer?
 
@@ -304,7 +299,7 @@ final class ListeningController {
         case .micBuiltIn:
             switchMic(builtIn: true)
         case .scratch:
-            if !bufPrimary.isEmpty || !bufSecondary.isEmpty {
+            if !primaryBuf.isEmpty || !secondaryBuf.isEmpty {
                 DLog.log("voice command: scratch (cleared pending utterance)")
                 clearUtteranceBuffers()
                 pendingSinceCommit = false
@@ -468,7 +463,7 @@ final class ListeningController {
             if self.frontmostIsAnthropic() {
                 // Queue it like a dictated utterance; commit types and sends.
                 self.clearUtteranceBuffers()
-                self.bufPrimary = remainder
+                self.primaryBuf.text = remainder
                 self.pendingSinceCommit = true
                 self.lastFinalAt = Date()
             } else if attempts < 16 {
@@ -566,7 +561,7 @@ final class ListeningController {
         lastResultAt = Date()
         if !isFinal {
             if secondary {
-                secondarySawSpeech = true
+                secondaryBuf.sawSpeech = true
                 return
             }
             volatilePreview = text
@@ -600,7 +595,7 @@ final class ListeningController {
                 activateClaudeApp()
             }
             if !muted, Defaults.showCaptions {
-                captions.show(bufPrimary + " " + text)
+                captions.show(primaryBuf.text + " " + text)
             }
             onStateChange?()
             return
@@ -641,19 +636,10 @@ final class ListeningController {
         if handleDictionaryCommand(cleaned) { return }
         // Accumulate; both models' text is compared and typed at commit time.
         pendingSinceCommit = true
-        let weight = Double(cleaned.count)
         if secondary {
-            bufSecondary += (bufSecondary.isEmpty ? "" : " ") + cleaned
-            if confidence >= 0 {
-                confSecondarySum += confidence * weight
-                confSecondaryWeight += weight
-            }
+            secondaryBuf.add(cleaned, confidence: confidence)
         } else {
-            bufPrimary += (bufPrimary.isEmpty ? "" : " ") + cleaned
-            if confidence >= 0 {
-                confPrimarySum += confidence * weight
-                confPrimaryWeight += weight
-            }
+            primaryBuf.add(cleaned, confidence: confidence)
         }
         DLog.log(String(format: "final (%@ model, %d chars, conf %.3f)", secondary ? "2nd" : "1st", cleaned.count, confidence))
         onStateChange?()
@@ -727,36 +713,29 @@ final class ListeningController {
 
     private func tick() {
         guard state == .listening else { return }
-        let silentFor = Date().timeIntervalSince(lastVoiceAt)
-        let sinceFinal = Date().timeIntervalSince(lastFinalAt)
-        // With two models racing, wait for both to report (the slower one's
-        // final can trail) — but only if the second model actually heard
-        // something, and never longer than 0.9s.
-        let bothReported = secondaryLocale == nil || (!bufPrimary.isEmpty && !bufSecondary.isEmpty)
-        let stillExpectingSecond = !bothReported && secondarySawSpeech && bufSecondary.isEmpty
-        // A lone low-confidence transcript is probably the other language
-        // misheard — wait longer for the second engine to rescue it.
-        let cPrimary = confPrimaryWeight > 0 ? confPrimarySum / confPrimaryWeight : 1.0
-        // Short garble scores deceptively high confidence, so short
-        // utterances need a higher bar before we trust a lone transcript.
-        let confBar = bufPrimary.count < 25 ? 0.75 : 0.5
-        let suspicious = secondaryLocale != nil && !bothReported && !bufPrimary.isEmpty && cPrimary < confBar
-        let slowModelGrace: Double = bothReported ? 0.2 : (suspicious ? 3.0 : (stillExpectingSecond ? 0.9 : 0.2))
-        if pendingSinceCommit, !muted, silentFor > Defaults.effectiveCommitDelay, sinceFinal > slowModelGrace, volatilePreview.isEmpty {
+        // The gating constants live in TextProcessing.commitDecision, where
+        // they are pure and covered by regression tests.
+        switch TextProcessing.commitDecision(
+            now: Date(), lastVoiceAt: lastVoiceAt, lastFinalAt: lastFinalAt,
+            lastResultAt: lastResultAt, sessionStartedAt: sessionStartedAt,
+            pending: pendingSinceCommit, muted: muted,
+            volatileEmpty: volatilePreview.isEmpty,
+            commitDelay: Defaults.effectiveCommitDelay,
+            dual: secondaryLocale != nil,
+            primary: primaryBuf, secondary: secondaryBuf) {
+        case .commit:
             commitUtterance()
-        } else if !pendingSinceCommit,
-                  silentFor > 60,
-                  Date().timeIntervalSince(sessionStartedAt) > 300 {
+        case .rotateIdle:
             // Periodic hygiene: fresh analyzers after long silence.
             rotateSessions()
-        } else if silentFor < 5,
-                  Date().timeIntervalSince(lastResultAt) > 15,
-                  Date().timeIntervalSince(sessionStartedAt) > 20 {
-            // Watchdog: voice is present but the engines have gone mute — a
-            // dead results stream would otherwise deafen us until 60s of
-            // silence, which never comes while the user keeps talking.
+        case .rotateWatchdog:
+            // Voice is present but the engines have gone mute — a dead
+            // results stream would otherwise deafen us until 60s of silence,
+            // which never comes while the user keeps talking.
             DLog.log("watchdog: engines silent while voice present — rotating sessions")
             rotateSessions()
+        case .wait:
+            break
         }
         // Capture watchdog: buffers stopped arriving entirely (input device
         // vanished, capture session died). Without this the app stays green
@@ -786,32 +765,28 @@ final class ListeningController {
     /// engines' own acoustic confidence (text-language guessing can't tell:
     /// the wrong model still emits real words of its own language).
     private func chooseUtterance() -> String {
-        if bufSecondary.isEmpty { return bufPrimary }
-        if bufPrimary.isEmpty { return bufSecondary }
-        let cEN = confPrimaryWeight > 0 ? confPrimarySum / confPrimaryWeight : -1
-        let cIT = confSecondaryWeight > 0 ? confSecondarySum / confSecondaryWeight : -1
-        if cEN >= 0, cIT >= 0 {
-            DLog.log(String(format: "confidence pick: en=%.3f it=%.3f -> %@", cEN, cIT, cIT > cEN ? "it" : "en"))
-            return cIT > cEN ? bufSecondary : bufPrimary
+        if let picked = TextProcessing.pickUtterance(primary: primaryBuf, secondary: secondaryBuf) {
+            if !primaryBuf.isEmpty, !secondaryBuf.isEmpty {
+                DLog.log(String(format: "confidence pick: 1st=%.3f 2nd=%.3f",
+                                primaryBuf.meanConfidence ?? -1, secondaryBuf.meanConfidence ?? -1))
+            }
+            return picked
         }
-        // Fallback when the engine reports no confidence.
+        // Fallback when an engine reports no confidence.
         func score(_ text: String, _ lang: NLLanguage) -> Double {
             let r = NLLanguageRecognizer()
             r.processString(text)
             return r.languageHypotheses(withMaximum: 5)[lang] ?? 0
         }
-        let en = score(bufPrimary, .english)
-        let it = score(bufSecondary, .italian)
+        let en = score(primaryBuf.text, .english)
+        let it = score(secondaryBuf.text, .italian)
         DLog.log(String(format: "language pick (fallback): en=%.2f it=%.2f -> %@", en, it, it > en ? "it" : "en"))
-        return it > en ? bufSecondary : bufPrimary
+        return it > en ? secondaryBuf.text : primaryBuf.text
     }
 
     private func clearUtteranceBuffers() {
-        bufPrimary = ""
-        bufSecondary = ""
-        confPrimarySum = 0; confPrimaryWeight = 0
-        confSecondarySum = 0; confSecondaryWeight = 0
-        secondarySawSpeech = false
+        primaryBuf.clear()
+        secondaryBuf.clear()
     }
 
     private func commitUtterance(force: Bool = false) {
