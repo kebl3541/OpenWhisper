@@ -57,7 +57,9 @@ enum Defaults {
     static var anyApp: Bool { d.object(forKey: "anyApp") as? Bool ?? false }
     static var insertViaPaste: Bool { d.object(forKey: "insertViaPaste") as? Bool ?? false }
     static var localeOverride: String? { d.string(forKey: "locale") }
-    static var showCaptions: Bool { d.object(forKey: "showCaptions") as? Bool ?? true }
+    /// Off by default: the words landing in the text field are their own
+    /// feedback; the overlay is opt-in for people who want it.
+    static var showCaptions: Bool { d.object(forKey: "showCaptions") as? Bool ?? false }
     static var preferBuiltInMic: Bool { d.object(forKey: "preferBuiltInMic") as? Bool ?? true }
     static var talkMode: Bool {
         get { d.object(forKey: "talkMode") as? Bool ?? false }

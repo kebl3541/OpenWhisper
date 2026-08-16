@@ -1,7 +1,5 @@
 # OpenWhisper
 
-[![CI](https://github.com/kebl3541/OpenWhisper/actions/workflows/ci.yml/badge.svg)](https://github.com/kebl3541/OpenWhisper/actions/workflows/ci.yml)
-[![Downloads](https://img.shields.io/github/downloads/kebl3541/OpenWhisper/total?label=downloads)](https://github.com/kebl3541/OpenWhisper/releases)
 <a href="https://buymeacoffee.com/philosophizer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="46"></a>
 
 Speak, and your words appear wherever your cursor is: a chat, an email, a
