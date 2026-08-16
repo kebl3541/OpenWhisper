@@ -1,9 +1,8 @@
 # OpenWhisper
 
 [![CI](https://github.com/kebl3541/OpenWhisper/actions/workflows/ci.yml/badge.svg)](https://github.com/kebl3541/OpenWhisper/actions/workflows/ci.yml)
-<!-- Uncomment once the repository is public. shields.io cannot see private repos:
 [![Downloads](https://img.shields.io/github/downloads/kebl3541/OpenWhisper/total?label=downloads)](https://github.com/kebl3541/OpenWhisper/releases)
--->
+<a href="https://buymeacoffee.com/philosophizer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="46"></a>
 
 Speak, and your words appear wherever your cursor is: a chat, an email, a
 document, an AI chatbot... anywhere!
@@ -17,8 +16,6 @@ an optional toggle hotkey.
 
 Everything runs on-device with Apple's built-in speech engine. No account,
 no cloud, no audio leaving your Mac.
-
-<a href="https://buymeacoffee.com/philosophizer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="46"></a>
 
 **Developers:** [TECHNICAL.md](TECHNICAL.md) covers building, tuning, and
 design; [ARCHITECTURE.md](ARCHITECTURE.md) covers the code.
