@@ -1,3 +1,4 @@
+# Runs on version tags (v*); create one with: git tag vX.Y && git push origin vX.Y
 name: Release
 
 on:
