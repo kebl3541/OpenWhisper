@@ -132,6 +132,83 @@ enum TextProcessing {
         "press enter", "press return", "hit enter", "hit return", "enter",
         "invia", "invia il messaggio", "manda", "mandalo", "invio",
     ]
+    static let italianCommands: Set<String> = [
+        "switch to italian", "italian mode", "speak italian", "dictate in italian",
+        "italiano", "parla italiano", "in italiano", "detta in italiano",
+    ]
+    static let englishCommands: Set<String> = [
+        "switch to english", "english mode", "speak english", "dictate in english",
+        "inglese", "parla inglese", "in inglese", "passa allinglese", "detta in inglese",
+    ]
+    static let scratchCommands: Set<String> = [
+        "scratch that", "scratch it", "delete that", "delete it",
+        "undo", "undo that", "undo it",
+    ]
+    static let talkOnCommands: Set<String> = [
+        "talk mode", "talk mode on", "talkmode", "talkmode on",
+        "voice mode", "voice mode on", "torque mode",
+    ]
+    static let talkOffCommands: Set<String> = [
+        "talk mode off", "talkmode off", "voice mode off", "text mode",
+        "stop talk mode", "stop talkmode", "talk mode of",
+    ]
+    static let readCommands: Set<String> = [
+        "read it to me", "read to me", "read it", "read this", "read that",
+        "read the answer", "read aloud", "read it aloud", "read it out loud",
+        "read out loud", "leggi", "leggimelo", "leggilo", "leggimi la risposta",
+    ]
+    static let stopReadCommands: Set<String> = [
+        "stop reading", "stop talking", "shut up", "stop", "quiet", "silence",
+        "basta", "zitto", "silenzio", "fermati",
+    ]
+    static let headphoneMicCommands: Set<String> = [
+        "headphone mic", "headphones mic", "headphone microphone", "headphones microphone",
+        "use headphone mic", "use headphones mic", "switch to headphones", "use the headphones",
+    ]
+    static let macMicCommands: Set<String> = [
+        "mac mic", "apple mic", "laptop mic", "built in mic", "builtin mic",
+        "mac microphone", "apple microphone", "use mac mic", "use the mac mic",
+        "switch to mac mic", "switch to the mac",
+    ]
+    static let newlineCommands: Set<String> = ["new line", "newline", "next line", "a capo"]
+    static let newParagraphCommands: Set<String> = ["new paragraph", "next paragraph", "nuovo paragrafo"]
+
+    /// Every standalone voice command, as one value. `parseCommand` is the
+    /// single source of truth both dispatchers consume — the live-final path
+    /// and the commit-time re-check (which exists because a command phrase
+    /// can arrive split across two engine finals and reassemble in the
+    /// buffer). Add a command here once; both paths see it.
+    enum Command: Equatable {
+        case pause, resume, send, scratch, read, stopRead
+        case talkOn, talkOff
+        case micHeadphone, micBuiltIn
+        case newline(Int)
+        case languageItalian, languageEnglish
+    }
+
+    /// `normalized` must be the output of `normalizeCommand`. Substring
+    /// matching applies only to long pause phrases — muting embedded in
+    /// other speech is harmless, everything else must match exactly.
+    static func parseCommand(_ normalized: String) -> Command? {
+        if pauseCommands.contains(normalized)
+            || pauseCommands.contains(where: { $0.count >= 10 && normalized.contains($0) }) {
+            return .pause
+        }
+        if resumeCommands.contains(normalized) { return .resume }
+        if sendCommands.contains(normalized) { return .send }
+        if scratchCommands.contains(normalized) { return .scratch }
+        if readCommands.contains(normalized) { return .read }
+        if stopReadCommands.contains(normalized) { return .stopRead }
+        if talkOffCommands.contains(normalized) { return .talkOff }
+        if talkOnCommands.contains(normalized) { return .talkOn }
+        if headphoneMicCommands.contains(normalized) { return .micHeadphone }
+        if macMicCommands.contains(normalized) { return .micBuiltIn }
+        if newParagraphCommands.contains(normalized) { return .newline(2) }
+        if newlineCommands.contains(normalized) { return .newline(1) }
+        if italianCommands.contains(normalized) { return .languageItalian }
+        if englishCommands.contains(normalized) { return .languageEnglish }
+        return nil
+    }
 
     /// Last sentence/line boundary, so streamed speech never cuts mid-sentence.
     static func sentenceBoundary(in s: String) -> String.Index? {
@@ -251,6 +328,28 @@ func runSelfTests() -> Int {
     expect(T.hotkeySpec("⌥ Space")! == (49, 0x800), "hotkey: option-space")
     expect(T.hotkeySpec("⇧⌘ D")! == (2, 0x300), "hotkey: shift-cmd-D")
     expect(T.hotkeySpec("None") == nil, "hotkey: none disables")
+
+    expect(T.parseCommand("stop listening") == .pause, "cmd: pause exact")
+    expect(T.parseCommand("i said please stop listening now") == .pause, "cmd: pause substring in long speech")
+    expect(T.parseCommand("start listening") == .resume, "cmd: resume")
+    expect(T.parseCommand("send it") == .send, "cmd: send")
+    expect(T.parseCommand("invia") == .send, "cmd: send italian")
+    expect(T.parseCommand("scratch that") == .scratch, "cmd: scratch")
+    expect(T.parseCommand("read it to me") == .read, "cmd: read")
+    expect(T.parseCommand("leggi") == .read, "cmd: read italian")
+    expect(T.parseCommand("stop") == .stopRead, "cmd: bare stop is stopRead")
+    expect(T.parseCommand("stop talking") == .stopRead, "cmd: stop talking")
+    expect(T.parseCommand("talk mode on") == .talkOn, "cmd: talk on")
+    expect(T.parseCommand("stop talk mode") == .talkOff, "cmd: talk off")
+    expect(T.parseCommand("headphone mic") == .micHeadphone, "cmd: headphone mic")
+    expect(T.parseCommand("mac mic") == .micBuiltIn, "cmd: mac mic")
+    expect(T.parseCommand("new line") == .newline(1), "cmd: newline")
+    expect(T.parseCommand("new paragraph") == .newline(2), "cmd: new paragraph")
+    expect(T.parseCommand("a capo") == .newline(1), "cmd: newline italian")
+    expect(T.parseCommand("italiano") == .languageItalian, "cmd: italian switch")
+    expect(T.parseCommand("in inglese") == .languageEnglish, "cmd: english switch")
+    expect(T.parseCommand("the weather is nice today") == nil, "cmd: ordinary speech is not a command")
+    expect(T.parseCommand("send me the report tomorrow") == nil, "cmd: send inside a sentence is not a command")
     expect(T.hotkeyChoices.allSatisfy { $0 == "None" || T.hotkeySpec($0) != nil },
            "hotkey: every offered choice resolves")
 

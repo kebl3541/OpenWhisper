@@ -248,49 +248,81 @@ final class ListeningController {
 
     var muted = false
 
-    private static let pauseCommands = TextProcessing.pauseCommands
-    private static let resumeCommands = TextProcessing.resumeCommands
-    private static let sendCommands = TextProcessing.sendCommands
-    private static let italianCommands: Set<String> = [
-        "switch to italian", "italian mode", "speak italian", "dictate in italian",
-        "italiano", "parla italiano", "in italiano", "detta in italiano",
-    ]
-    private static let englishCommands: Set<String> = [
-        "switch to english", "english mode", "speak english", "dictate in english",
-        "inglese", "parla inglese", "in inglese", "passa allinglese", "detta in inglese",
-    ]
-    private static let scratchCommands: Set<String> = [
-        "scratch that", "scratch it", "delete that", "delete it",
-        "undo", "undo that", "undo it",
-    ]
-    private static let talkOnCommands: Set<String> = [
-        "talk mode", "talk mode on", "talkmode", "talkmode on",
-        "voice mode", "voice mode on", "torque mode",
-    ]
-    private static let talkOffCommands: Set<String> = [
-        "talk mode off", "talkmode off", "voice mode off", "text mode",
-        "stop talk mode", "stop talkmode", "talk mode of",
-    ]
-    private static let readCommands: Set<String> = [
-        "read it to me", "read to me", "read it", "read this", "read that",
-        "read the answer", "read aloud", "read it aloud", "read it out loud",
-        "read out loud", "leggi", "leggimelo", "leggilo", "leggimi la risposta",
-    ]
-    private static let stopReadCommands: Set<String> = [
-        "stop reading", "stop talking", "shut up", "stop", "quiet", "silence",
-        "basta", "zitto", "silenzio", "fermati",
-    ]
-    private static let headphoneMicCommands: Set<String> = [
-        "headphone mic", "headphones mic", "headphone microphone", "headphones microphone",
-        "use headphone mic", "use headphones mic", "switch to headphones", "use the headphones",
-    ]
-    private static let macMicCommands: Set<String> = [
-        "mac mic", "apple mic", "laptop mic", "built in mic", "builtin mic",
-        "mac microphone", "apple microphone", "use mac mic", "use the mac mic",
-        "switch to mac mic", "switch to the mac",
-    ]
-    private static let newlineCommands: Set<String> = ["new line", "newline", "next line", "a capo"]
-    private static let newParagraphCommands: Set<String> = ["new paragraph", "next paragraph", "nuovo paragrafo"]
+    /// Live-final command dispatch. Returns false when the phrase should
+    /// fall through to dictation (bare "stop" outside read-aloud, "start
+    /// listening" while already unmuted — the commit re-check drops the
+    /// latter rather than typing it).
+    private func handleLiveCommand(_ cmd: TextProcessing.Command) -> Bool {
+        // These work even while muted.
+        switch cmd {
+        case .pause:
+            // Mute must work even when the phrase is embedded in other
+            // speech (e.g. a video playing in the room) — parseCommand
+            // substring-matches long pause phrases. False positives are
+            // harmless; "start listening" undoes them.
+            if !muted { setMuted(true) }
+            return true
+        case .talkOff:
+            DLog.log("voice command: talk mode off")
+            Defaults.talkMode = false
+            SpeechOut.shared.stop()
+            NSSound(named: "Bottle")?.play()
+            onStateChange?()
+            return true
+        case .talkOn:
+            DLog.log("voice command: talk mode on")
+            Defaults.talkMode = true
+            NSSound(named: "Glass")?.play()
+            onStateChange?()
+            return true
+        case .languageItalian, .languageEnglish:
+            if secondaryLocale != nil {
+                DLog.log("language command ignored — dual language is automatic")
+                NSSound(named: "Pop")?.play()
+            } else {
+                switchLocale(cmd == .languageItalian ? "it-IT" : "en-GB")
+            }
+            return true
+        default:
+            break
+        }
+        if muted {
+            if cmd == .resume { setMuted(false) }
+            else { DLog.log("muted; ignored a command") }
+            return true
+        }
+        switch cmd {
+        case .send:
+            DLog.log("voice command: send now")
+            commitUtterance(force: true)
+        case .read:
+            doReadAloud()
+        case .newline(let n):
+            doNewline(n)
+        case .micHeadphone:
+            switchMic(builtIn: false)
+        case .micBuiltIn:
+            switchMic(builtIn: true)
+        case .scratch:
+            if !bufPrimary.isEmpty || !bufSecondary.isEmpty {
+                DLog.log("voice command: scratch (cleared pending utterance)")
+                clearUtteranceBuffers()
+                pendingSinceCommit = false
+                captions.hide()
+            } else {
+                doScratchTyped()
+            }
+            onStateChange?()
+        case .stopRead, .resume:
+            // Bare "stop" outside read-aloud is ordinary dictation; an
+            // unmuted "start listening" is handled at commit (dropped).
+            return false
+        case .pause, .talkOn, .talkOff, .languageItalian, .languageEnglish:
+            return true // already handled above
+        }
+        return true
+    }
+
     private func handleDictionaryCommand(_ cleaned: String) -> Bool {
         if let (wrong, right) = TextProcessing.parseReplace(cleaned) {
             var dict = Defaults.corrections
@@ -551,7 +583,7 @@ final class ListeningController {
             // continuous media audio there may never be a clean final.
             if !muted {
                 let v = normalizeCommand(text)
-                if Self.pauseCommands.contains(where: { $0.count >= 10 && v.contains($0) }) {
+                if TextProcessing.pauseCommands.contains(where: { $0.count >= 10 && v.contains($0) }) {
                     DLog.log("instant mute (volatile)")
                     setMuted(true)
                     return
@@ -585,10 +617,11 @@ final class ListeningController {
         }
 
         let command = normalizeCommand(cleaned)
+        let parsed = TextProcessing.parseCommand(command)
         // While the Mac itself is speaking, the mic may be hearing our own
         // voice — accept only "stop", ignore everything else.
         if SpeechOut.shared.isSpeaking {
-            if Self.stopReadCommands.contains(command) {
+            if parsed == .stopRead {
                 DLog.log("voice command: stop reading")
                 SpeechOut.shared.stop()
             } else {
@@ -600,71 +633,12 @@ final class ListeningController {
             handleWake(remainder: remainder)
             return
         }
-        // Mute must work even when the phrase is embedded in other speech
-        // (e.g. a video playing in the room) — match it anywhere. Muting on a
-        // false positive is harmless; "start listening" undoes it.
-        if Self.pauseCommands.contains(command)
-            || Self.pauseCommands.contains(where: { $0.count >= 10 && command.contains($0) }) {
-            if !muted { setMuted(true) }
-            return
-        }
-        if Self.talkOffCommands.contains(command) {
-            DLog.log("voice command: talk mode off")
-            Defaults.talkMode = false
-            SpeechOut.shared.stop()
-            NSSound(named: "Bottle")?.play()
-            onStateChange?()
-            return
-        }
-        if Self.talkOnCommands.contains(command) {
-            DLog.log("voice command: talk mode on")
-            Defaults.talkMode = true
-            NSSound(named: "Glass")?.play()
-            onStateChange?()
-            return
-        }
-        if Self.italianCommands.contains(command) || Self.englishCommands.contains(command) {
-            if secondaryLocale != nil {
-                DLog.log("language command ignored — dual language is automatic")
-                NSSound(named: "Pop")?.play()
-            } else {
-                switchLocale(Self.italianCommands.contains(command) ? "it-IT" : "en-GB")
-            }
-            return
-        }
+        if let parsed, handleLiveCommand(parsed) { return }
         if muted {
-            if Self.resumeCommands.contains(command) { setMuted(false) }
-            else { DLog.log("muted; ignored a phrase (\(cleaned.count) chars)") }
+            DLog.log("muted; ignored a phrase (\(cleaned.count) chars)")
             return
         }
-        if Self.sendCommands.contains(command) {
-            DLog.log("voice command: send now")
-            commitUtterance(force: true)
-            return
-        }
-        if Self.readCommands.contains(command) {
-            doReadAloud()
-            return
-        }
-        if Self.newlineCommands.contains(command) || Self.newParagraphCommands.contains(command) {
-            doNewline(Self.newParagraphCommands.contains(command) ? 2 : 1)
-            return
-        }
-        if Self.headphoneMicCommands.contains(command) { switchMic(builtIn: false); return }
-        if Self.macMicCommands.contains(command) { switchMic(builtIn: true); return }
         if handleDictionaryCommand(cleaned) { return }
-        if Self.scratchCommands.contains(command) {
-            if !bufPrimary.isEmpty || !bufSecondary.isEmpty {
-                DLog.log("voice command: scratch (cleared pending utterance)")
-                clearUtteranceBuffers()
-                pendingSinceCommit = false
-                captions.hide()
-            } else {
-                doScratchTyped()
-            }
-            onStateChange?()
-            return
-        }
         // Accumulate; both models' text is compared and typed at commit time.
         pendingSinceCommit = true
         let weight = Double(cleaned.count)
@@ -869,41 +843,46 @@ final class ListeningController {
             }
         }
         if !chosen.isEmpty {
-            let cmd = normalizeCommand(chosen)
-            if Self.pauseCommands.contains(cmd)
-                || Self.pauseCommands.contains(where: { $0.count >= 10 && cmd.contains($0) }) {
+            switch TextProcessing.parseCommand(normalizeCommand(chosen)) {
+            case .pause:
                 DLog.log("commit: assembled utterance is a mute command — muting, not typing")
                 setMuted(true)
                 return
-            }
-            if Self.sendCommands.contains(cmd) {
+            case .send:
                 DLog.log("commit: assembled utterance is a send command — pressing Return only")
                 chosen = ""
                 force = true
-            } else if Self.scratchCommands.contains(cmd) {
+            case .scratch:
                 DLog.log("commit: assembled utterance is a scratch command")
                 doScratchTyped()
                 chosen = ""
-            } else if Self.readCommands.contains(cmd) {
+            case .read:
                 doReadAloud()
                 chosen = ""
-            } else if Self.newlineCommands.contains(cmd) || Self.newParagraphCommands.contains(cmd) {
-                doNewline(Self.newParagraphCommands.contains(cmd) ? 2 : 1)
+            case .newline(let n):
+                doNewline(n)
                 chosen = ""
-            } else if Self.talkOnCommands.contains(cmd) || Self.talkOffCommands.contains(cmd) {
-                Defaults.talkMode = Self.talkOnCommands.contains(cmd)
+            case .talkOn, .talkOff:
+                Defaults.talkMode = TextProcessing.parseCommand(normalizeCommand(chosen)) == .talkOn
                 DLog.log("commit: assembled utterance is a talk-mode command")
                 chosen = ""
-            } else if Self.headphoneMicCommands.contains(cmd) {
+            case .micHeadphone:
                 switchMic(builtIn: false)
                 chosen = ""
-            } else if Self.macMicCommands.contains(cmd) {
+            case .micBuiltIn:
                 switchMic(builtIn: true)
                 chosen = ""
-            } else if Self.resumeCommands.contains(cmd)
-                        || Self.italianCommands.contains(cmd) || Self.englishCommands.contains(cmd) {
+            case .resume, .languageItalian, .languageEnglish:
                 // Not meaningful at commit time — but never type them either.
-                DLog.log("commit: dropped assembled command (\(cmd.count) chars)")
+                DLog.log("commit: dropped assembled command")
+                chosen = ""
+            case .stopRead, nil:
+                // Bare "stop" is legitimate dictation; anything unparsed is text.
+                break
+            }
+            // A split "replace X with Y" reassembles here too — store the
+            // correction instead of typing the sentence.
+            if !chosen.isEmpty, handleDictionaryCommand(chosen) {
                 chosen = ""
             }
         }
