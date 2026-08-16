@@ -84,6 +84,15 @@ enum Defaults {
         get { d.string(forKey: "journalDir") }
         set { d.set(newValue, forKey: "journalDir") }
     }
+    /// Which app the wake phrase ("Hey Claude") activates and types into.
+    /// The phrase itself stays fixed — its regex encodes field-tested
+    /// mishears — but the target is configurable.
+    static var wakeTargetPrefix: String {
+        d.string(forKey: "wakeTargetPrefix") ?? "com.anthropic."
+    }
+    static var wakeTargetAppID: String {
+        d.string(forKey: "wakeTargetAppID") ?? "com.anthropic.claudefordesktop"
+    }
     /// Named toggle-listening hotkey ("None" disables). Voice stays primary;
     /// this is for users who want a physical switch too.
     static var hotkeyChoice: String {

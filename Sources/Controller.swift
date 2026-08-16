@@ -428,21 +428,21 @@ final class ListeningController {
         TextProcessing.wakeRemainder(of: text)
     }
 
-    private func frontmostIsAnthropic() -> Bool {
+    private func frontmostIsWakeTarget() -> Bool {
         (NSWorkspace.shared.frontmostApplication?.bundleIdentifier?.lowercased() ?? "")
-            .hasPrefix("com.anthropic.")
+            .hasPrefix(Defaults.wakeTargetPrefix.lowercased())
     }
 
     private var lastWakeActivation = Date.distantPast
 
-    private func activateClaudeApp() {
+    private func activateWakeTargetApp() {
         lastWakeActivation = Date()
         let ws = NSWorkspace.shared
         if let running = ws.runningApplications.first(where: {
-            ($0.bundleIdentifier?.lowercased() ?? "").hasPrefix("com.anthropic.")
+            ($0.bundleIdentifier?.lowercased() ?? "").hasPrefix(Defaults.wakeTargetPrefix.lowercased())
         }) {
             running.activate()
-        } else if let url = ws.urlForApplication(withBundleIdentifier: "com.anthropic.claudefordesktop") {
+        } else if let url = ws.urlForApplication(withBundleIdentifier: Defaults.wakeTargetAppID) {
             ws.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
         }
     }
@@ -451,7 +451,7 @@ final class ListeningController {
         DLog.log("wake word: activating Claude (remainder \(remainder.count) chars)")
         if muted { setMuted(false) }
         NSSound(named: "Pop")?.play()
-        activateClaudeApp()
+        activateWakeTargetApp()
         // Drop anything both engines buffered for this utterance — the
         // trailing secondary final still carries the raw "hey claude …" text
         // and must not win the confidence pick at commit.
@@ -460,7 +460,7 @@ final class ListeningController {
         var attempts = 0
         func tryType() {
             attempts += 1
-            if self.frontmostIsAnthropic() {
+            if self.frontmostIsWakeTarget() {
                 // Queue it like a dictated utterance; commit types and sends.
                 self.clearUtteranceBuffers()
                 self.primaryBuf.text = remainder
@@ -589,10 +589,10 @@ final class ListeningController {
             if !muted, !SpeechOut.shared.isSpeaking,
                wakeRemainder(of: text) != nil,
                Date().timeIntervalSince(lastWakeActivation) > 3,
-               !frontmostIsAnthropic() {
+               !frontmostIsWakeTarget() {
                 DLog.log("wake word (volatile): pre-activating Claude")
                 NSSound(named: "Pop")?.play()
-                activateClaudeApp()
+                activateWakeTargetApp()
             }
             if !muted, Defaults.showCaptions {
                 captions.show(primaryBuf.text + " " + text)

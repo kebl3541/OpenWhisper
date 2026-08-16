@@ -15,7 +15,9 @@ GitHub's `macos-26` runners.
 
 **Not a developer? Start with the [User Guide](docs/USER-GUIDE.md)** —
 installation, the icon, every voice command, settings, and troubleshooting,
-in plain language.
+in plain language. Contributors: read [ARCHITECTURE.md](ARCHITECTURE.md)
+first — it documents the concurrency invariants that look simplifiable but
+aren't.
 
 ## How it works
 
@@ -160,6 +162,8 @@ defaults write io.github.kebl3541.openwhisper locale en-GB              # speech
 defaults write io.github.kebl3541.openwhisper anyApp -bool true         # type into any app
 defaults write io.github.kebl3541.openwhisper voiceThreshold -float 0.012
 defaults write io.github.kebl3541.openwhisper removeFillers -bool false # keep um/uh verbatim
+defaults write io.github.kebl3541.openwhisper wakeTargetPrefix com.example.   # app family "Hey Claude" activates
+defaults write io.github.kebl3541.openwhisper wakeTargetAppID com.example.app # exact app to launch if not running
 defaults write io.github.kebl3541.openwhisper startMuted -bool true     # launch muted until "start listening"
 defaults write io.github.kebl3541.openwhisper stashToClipboard -bool true # copy transcript when typing isn't possible
 defaults write io.github.kebl3541.openwhisper targetBundlePrefixes -array "com.anthropic." "ai.perplexity."
