@@ -5,8 +5,10 @@
 [![Downloads](https://img.shields.io/github/downloads/kebl3541/OpenWhisper/total?label=downloads)](https://github.com/kebl3541/OpenWhisper/releases)
 -->
 
-Speak, and your words appear wherever your cursor is — a chat, an email, a
-document. OpenWhisper is hands-free dictation for macOS: no buttons to hold,
+Speak, and your words appear wherever your cursor is: a chat, an email, a
+document, an AI chatbot...anywhere! 
+
+OpenWhisper is hands-free dictation for macOS: no buttons to hold,
 no shortcuts to remember. It listens continuously (until you mute it),
 turns speech into text right on your Mac, types it into whatever you're
 writing, and in chat apps can even press Return for you. You control
