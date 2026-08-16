@@ -448,7 +448,7 @@ final class ListeningController {
     }
 
     private func handleWake(remainder: String) {
-        DLog.log("wake word: activating Claude (remainder \(remainder.count) chars)")
+        DLog.log("wake word: activating target app (remainder \(remainder.count) chars)")
         if muted { setMuted(false) }
         NSSound(named: "Pop")?.play()
         activateWakeTargetApp()
@@ -590,7 +590,7 @@ final class ListeningController {
                wakeRemainder(of: text) != nil,
                Date().timeIntervalSince(lastWakeActivation) > 3,
                !frontmostIsWakeTarget() {
-                DLog.log("wake word (volatile): pre-activating Claude")
+                DLog.log("wake word (volatile): pre-activating target app")
                 NSSound(named: "Pop")?.play()
                 activateWakeTargetApp()
             }
@@ -767,8 +767,9 @@ final class ListeningController {
     private func chooseUtterance() -> String {
         if let picked = TextProcessing.pickUtterance(primary: primaryBuf, secondary: secondaryBuf) {
             if !primaryBuf.isEmpty, !secondaryBuf.isEmpty {
-                DLog.log(String(format: "confidence pick: 1st=%.3f 2nd=%.3f",
-                                primaryBuf.meanConfidence ?? -1, secondaryBuf.meanConfidence ?? -1))
+                DLog.log(String(format: "confidence pick: 1st=%.3f 2nd=%.3f -> %@",
+                                primaryBuf.meanConfidence ?? -1, secondaryBuf.meanConfidence ?? -1,
+                                picked == secondaryBuf.text ? "2nd" : "1st"))
             }
             return picked
         }
@@ -793,6 +794,10 @@ final class ListeningController {
         var force = force
         pendingSinceCommit = false
         var chosen = chooseUtterance()
+        // Dictionary commands are matched against the words as spoken —
+        // corrections must not rewrite the phrase before it's parsed, or
+        // "replace a i with foo" stores the already-corrected key.
+        let spokenForDictionary = chosen
         clearUtteranceBuffers()
         if !chosen.isEmpty {
             if let stripped = TextProcessing.stripTrailingReadCommand(chosen) {
@@ -849,7 +854,7 @@ final class ListeningController {
                 chosen = ""
             case .resume, .languageItalian, .languageEnglish:
                 // Not meaningful at commit time — but never type them either.
-                DLog.log("commit: dropped assembled command")
+                DLog.log("commit: dropped assembled command (\(chosen.count) chars)")
                 chosen = ""
             case .stopRead, nil:
                 // Bare "stop" is legitimate dictation; anything unparsed is text.
@@ -857,7 +862,7 @@ final class ListeningController {
             }
             // A split "replace X with Y" reassembles here too — store the
             // correction instead of typing the sentence.
-            if !chosen.isEmpty, handleDictionaryCommand(chosen) {
+            if !chosen.isEmpty, handleDictionaryCommand(spokenForDictionary) {
                 chosen = ""
             }
         }

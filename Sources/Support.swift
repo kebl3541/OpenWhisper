@@ -88,7 +88,10 @@ enum Defaults {
     /// The phrase itself stays fixed — its regex encodes field-tested
     /// mishears — but the target is configurable.
     static var wakeTargetPrefix: String {
-        d.string(forKey: "wakeTargetPrefix") ?? "com.anthropic."
+        // Empty would prefix-match every app, making the wake phrase type
+        // into whatever is frontmost — treat it as unset.
+        let v = d.string(forKey: "wakeTargetPrefix") ?? ""
+        return v.isEmpty ? "com.anthropic." : v
     }
     static var wakeTargetAppID: String {
         d.string(forKey: "wakeTargetAppID") ?? "com.anthropic.claudefordesktop"
