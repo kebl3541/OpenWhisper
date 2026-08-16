@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 
 APP="OpenWhisper.app"
 
-swiftc -O -parse-as-library -target arm64-apple-macos26.0 Sources/main.swift -o OpenWhisper
+swiftc -O -parse-as-library -target arm64-apple-macos26.0 Sources/*.swift -o OpenWhisper
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
