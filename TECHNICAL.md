@@ -138,3 +138,10 @@ global values.
 `~/Library/Application Support/OpenWhisper/openwhisper.log` records events
 and permission states only; it never contains spoken words. The file
 self-truncates past 5 MB.
+
+## License and support
+
+OpenWhisper is open source under the [MIT license](LICENSE). If it saves
+your hands some typing, you can support development:
+
+<a href="https://buymeacoffee.com/philosophizer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="46"></a>

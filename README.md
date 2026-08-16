@@ -11,10 +11,8 @@ OpenWhisper is hands-free dictation for macOS. There are no buttons to
 hold and no shortcuts to remember. It listens continuously (until you
 mute it), turns speech into text right on your Mac, types it into
 whatever you're writing, and in chat apps can even press Return for you.
-You control everything by voice. And if always-on isn't your style, it
-also works as a classic press-a-key dictation tool: an optional hotkey
-mutes and unmutes, and you can keep Return in your own hands (see
-"Hands-free is optional" below).
+There are two ways to drive it, and you choose: fully hands-free by
+voice, or push-to-talk with a key. See "Two ways to use it" below.
 
 Everything runs on-device with Apple's built-in speech engine. No account,
 no cloud, no audio leaving your Mac.
@@ -102,24 +100,38 @@ Things worth knowing:
 - **Talking to people in the room?** Say **"pause listening"** first,
   otherwise the conversation becomes keystrokes wherever your cursor is.
 
-### Prefer keys and clicks? Hands-free is optional
+## 5. Two ways to use it
 
-You can use OpenWhisper like a classic push-to-talk dictation tool
-instead of an always-on assistant:
+### Hands-free, by voice (the default)
 
-- Turn on **Launch muted** in Settings, so nothing is typed until you say
-  so.
-- Pick a **toggle hotkey** in Settings (⌥ Space, F18, and others). One
-  press unmutes, you dictate, one press mutes again.
-- Turn **Auto-send** off and press Return yourself when the text is
-  ready.
-- Everything the voice commands do is also in the menu: mute, unmute,
-  mic off, copy.
+The app is always listening, and your voice does everything: dictating,
+sending ("send it"), deleting ("scratch that"), muting ("pause
+listening"), even summoning Claude ("Hey Claude, …"). In chat apps,
+Return is pressed for you after a short pause, so a whole conversation
+happens without touching the keyboard. This is the mode OpenWhisper was
+built for: cooking, pacing the room, resting your wrists. All the
+commands are in the next section.
 
-In that setup the microphone only produces text between your two
-keypresses, and nothing is ever sent without you pressing Return.
+### Push-to-talk, by key
 
-## 5. Voice commands
+If an always-on microphone isn't your style, three settings turn
+OpenWhisper into a classic press-a-key dictation tool:
+
+1. Turn on **Launch muted**, so nothing is typed until you ask.
+2. Pick a **toggle hotkey** (⌥ Space, F18, and others). One press
+   unmutes, you dictate, one press mutes again.
+3. Turn **Auto-send** off and press Return yourself when the text is
+   ready.
+
+In this setup the microphone only produces text between your two
+keypresses, and nothing is ever sent without you pressing Return. The
+menu has clickable equivalents for everything else: mute, unmute, mic
+off, copy.
+
+You can mix the modes freely: the voice commands keep working in
+push-to-talk mode, and the hotkey keeps working in hands-free mode.
+
+## 6. Voice commands
 
 Say these as their own short phrase (a pause before and after helps).
 Add "Claude" in front if you like: "Claude, pause listening."
@@ -163,7 +175,7 @@ Add "Claude" in front if you like: "Claude, pause listening."
 | "headphone mic" | Use your headphones' microphone. |
 | "mac mic" / "apple mic" | Use the Mac's built-in microphone (recommended). |
 
-## 6. The menu
+## 7. The menu
 
 Click the waveform icon:
 
@@ -183,7 +195,7 @@ Click the waveform icon:
 - **History…**: appears if you enabled history in Settings.
 - **Start at Login**: start OpenWhisper automatically when you log in.
 
-## 7. Settings
+## 8. Settings
 
 Open **Settings…** from the menu. Everything takes effect immediately.
 
@@ -207,7 +219,7 @@ Open **Settings…** from the menu. Everything takes effect immediately.
 - **Keep searchable history**: remember everything you dictate in a
   local file, searchable from **History…**. Off by default.
 
-## 8. Your privacy
+## 9. Your privacy
 
 - Speech recognition runs entirely on your Mac. No account, no cloud, no
   network connection.
@@ -221,7 +233,7 @@ Open **Settings…** from the menu. Everything takes effect immediately.
   (a video, a speakerphone call) could trigger it. If that matters in
   your environment, use **Launch muted** or "Turn Mic Off Completely".
 
-## 9. When something's wrong
+## 10. When something's wrong
 
 **It's not typing anything.**
 Check the icon: orange means muted (say "start listening"); grey means the
