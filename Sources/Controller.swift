@@ -340,6 +340,7 @@ final class ListeningController {
     }
 
     private var pendingReadAfterSend = false
+    private var answerWatcher: Task<Void, Never>?
 
     nonisolated private static func trimPageJunk(_ s: String) -> String {
         TextProcessing.trimPageJunk(s)
@@ -353,20 +354,40 @@ final class ListeningController {
     /// complete sentences instead of waiting for the answer to finish.
     private func startAnswerWatcher(prompt: String) {
         guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return }
+        // One watcher only. Stacked watchers from successive sends each
+        // polled for minutes and starved the thread pool the speech engine
+        // delivers results on — dictation went deaf until they drained.
+        answerWatcher?.cancel()
         let gen = SpeechOut.shared.generation
         DLog.log("answer watcher: started (pid \(pid))")
-        Task.detached {
+        answerWatcher = Task.detached {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             let key = String(prompt.prefix(60)).trimmingCharacters(in: .whitespaces)
             var spoken = ""
             var lastFull = ""
             var stable = 0
+            var emptyReads = 0
             for _ in 0..<90 {
+                if Task.isCancelled {
+                    DLog.log("answer watcher: superseded by a newer send")
+                    return
+                }
                 if await SpeechOut.shared.generation != gen {
                     DLog.log("answer watcher: cancelled by stop")
                     return
                 }
                 let full = await FrontTextReader.windowText(pid: pid) ?? ""
+                // An app with no readable text stays unreadable: give up
+                // fast instead of grinding for minutes.
+                if full.isEmpty {
+                    emptyReads += 1
+                    if emptyReads >= 3 {
+                        DLog.log("answer watcher: nothing readable in this app — giving up")
+                        return
+                    }
+                } else {
+                    emptyReads = 0
+                }
                 var answer: String?
                 if key.count > 10,
                    let r = full.range(of: key, options: [.backwards, .caseInsensitive]) {

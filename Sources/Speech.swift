@@ -156,18 +156,22 @@ enum FrontTextReader {
     /// Pass the pid captured when the command was given so the reader stays
     /// locked on that app even if the user switches windows meanwhile.
     static func windowText(pid: pid_t, maxChars: Int = 100_000) async -> String? {
-        if let ax = axWindowText(pid: pid, maxChars: maxChars) { return ax }
+        if let ax = await axWindowText(pid: pid, maxChars: maxChars) { return ax }
         DLog.log("read aloud: AX gave nothing usable, trying OCR")
         return await ocrWindowText(pid: pid, maxChars: maxChars)
     }
 
-    private static func axWindowText(pid: pid_t, maxChars: Int) -> String? {
+    private static func axWindowText(pid: pid_t, maxChars: Int) async -> String? {
         let axApp = AXUIElementCreateApplication(pid)
         AXUIElementSetAttributeValue(axApp, "AXManualAccessibility" as CFString, kCFBooleanTrue)
         AXUIElementSetAttributeValue(axApp, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
 
         for attempt in 0..<6 {
-            if attempt > 0 { usleep(800_000) }
+            // Task.sleep, never usleep: this runs on the shared cooperative
+            // thread pool, and blocking those threads starves the speech
+            // engine's own result streams (observed as "dictation went deaf
+            // while answer watchers were polling").
+            if attempt > 0 { try? await Task.sleep(nanoseconds: 800_000_000) }
             guard let winRef = attr(axApp, kAXFocusedWindowAttribute as String),
                   CFGetTypeID(winRef) == AXUIElementGetTypeID() else { continue }
             let win = winRef as! AXUIElement
@@ -222,7 +226,32 @@ enum FrontTextReader {
         return nil
     }
 
+    @MainActor private static var screenPromptShown = false
+
     private static func ocrWindowText(pid: pid_t, maxChars: Int) async -> String? {
+        // The OCR fallback needs Screen Recording, a separate TCC grant that
+        // does not come with mic or Accessibility (and was lost in the
+        // bundle-id migration). Without this check the failure is silent and
+        // talk mode just "does nothing".
+        guard CGPreflightScreenCaptureAccess() else {
+            DLog.log("ocr: Screen Recording permission missing")
+            await MainActor.run {
+                guard !screenPromptShown else { return }
+                screenPromptShown = true
+                CGRequestScreenCaptureAccess()
+                let a = NSAlert()
+                a.messageText = "Reading this app aloud needs Screen Recording"
+                a.informativeText = "This app doesn't expose its text to accessibility, so OpenWhisper reads it from the screen instead. Allow OpenWhisper under System Settings → Privacy & Security → Screen Recording, then relaunch the app."
+                a.addButton(withTitle: "Open Settings")
+                a.addButton(withTitle: "Not Now")
+                NSApp.activate(ignoringOtherApps: true)
+                if a.runModal() == .alertFirstButtonReturn,
+                   let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            return nil
+        }
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             guard let win = content.windows
