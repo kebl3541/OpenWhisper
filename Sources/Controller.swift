@@ -226,10 +226,14 @@ final class ListeningController {
     }
 
     private var wasSpeaking = false
+    private var voiceOnsetAt = Date.distantPast
     private func noteAudio(rms: Double) {
         lastBufferAt = Date()
         if rms > Defaults.voiceThreshold {
-            if !wasSpeaking { DLog.log(String(format: "voice detected (rms=%.4f)", rms)) }
+            if !wasSpeaking {
+                DLog.log(String(format: "voice detected (rms=%.4f)", rms))
+                voiceOnsetAt = Date()
+            }
             wasSpeaking = true
             lastVoiceAt = Date()
         } else if wasSpeaking, Date().timeIntervalSince(lastVoiceAt) > 1.0 {
@@ -737,7 +741,8 @@ final class ListeningController {
         // The gating constants live in TextProcessing.commitDecision, where
         // they are pure and covered by regression tests.
         switch TextProcessing.commitDecision(
-            now: Date(), lastVoiceAt: lastVoiceAt, lastFinalAt: lastFinalAt,
+            now: Date(), lastVoiceAt: lastVoiceAt, voiceOnsetAt: voiceOnsetAt,
+            lastFinalAt: lastFinalAt,
             lastResultAt: lastResultAt, sessionStartedAt: sessionStartedAt,
             pending: pendingSinceCommit, muted: muted,
             volatileEmpty: volatilePreview.isEmpty,

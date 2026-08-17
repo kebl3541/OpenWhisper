@@ -268,6 +268,7 @@ enum TextProcessing {
     ///   transcripts need a higher bar (0.75 vs 0.5) before we trust them.
     static func commitDecision(now: Date,
                                lastVoiceAt: Date,
+                               voiceOnsetAt: Date,
                                lastFinalAt: Date,
                                lastResultAt: Date,
                                sessionStartedAt: Date,
@@ -292,7 +293,15 @@ enum TextProcessing {
         if !pending, silentFor > 60, now.timeIntervalSince(sessionStartedAt) > 300 {
             return .rotateIdle
         }
+        // Dead-stream watchdog. The voice must have been present for a
+        // SUSTAINED stretch with no results: at the first syllable after a
+        // quiet spell, lastResultAt is legitimately stale (engines produce
+        // nothing from silence) and the engine simply hasn't had time to
+        // answer yet — rotating there eats the user's first sentence.
+        // (Observed live: rotation fired at the same second as voice onset,
+        // after every >15s pause.)
         if silentFor < 5,
+           now.timeIntervalSince(voiceOnsetAt) > 6,
            now.timeIntervalSince(lastResultAt) > 15,
            now.timeIntervalSince(sessionStartedAt) > 20 {
             return .rotateWatchdog
@@ -440,11 +449,13 @@ func runSelfTests() -> Int {
     heard.sawSpeech = true
     let empty = T.UtteranceBuffer()
 
-    func decide(now: Double, final: Double = 0, voice: Double = 0, result: Double? = nil,
+    func decide(now: Double, final: Double = 0, voice: Double = 0, onset: Double = -100,
+                result: Double? = nil,
                 session: Double = -100, pending: Bool = true, muted: Bool = false,
                 volatileEmpty: Bool = true, dual: Bool = true,
                 primary: T.UtteranceBuffer, secondary: T.UtteranceBuffer) -> T.CommitAction {
-        T.commitDecision(now: at(now), lastVoiceAt: at(voice), lastFinalAt: at(final),
+        T.commitDecision(now: at(now), lastVoiceAt: at(voice), voiceOnsetAt: at(onset),
+                         lastFinalAt: at(final),
                          lastResultAt: at(result ?? now), sessionStartedAt: at(session),
                          pending: pending, muted: muted, volatileEmpty: volatileEmpty,
                          commitDelay: 0.7, dual: dual, primary: primary, secondary: secondary)
@@ -473,9 +484,12 @@ func runSelfTests() -> Int {
     expect(decide(now: 61, voice: 0, session: -300, pending: false,
                   primary: empty, secondary: empty) == .rotateIdle,
            "gate: idle hygiene rotation after long silence")
-    expect(decide(now: 20, final: 0, voice: 18, result: 2, session: -5, pending: false,
+    expect(decide(now: 20, final: 0, voice: 18, onset: 10, result: 2, session: -5, pending: false,
                   primary: empty, secondary: empty) == .rotateWatchdog,
-           "gate: watchdog rotates when voice present but engines mute")
+           "gate: watchdog rotates when sustained voice gets no results")
+    expect(decide(now: 20, final: 0, voice: 20, onset: 19.5, result: 2, session: -5, pending: false,
+                  primary: empty, secondary: empty) == .wait,
+           "gate: watchdog must NOT fire at voice onset after a quiet spell")
 
     var joined = T.UtteranceBuffer()
     joined.add("hello", confidence: 1.0)
