@@ -68,6 +68,7 @@ tells you at a glance what's happening:
 | 🟢 Green waveform | Listening. Speak and it types. |
 | 🔴 Red filled waveform | Hearing your voice right now. |
 | 🟠 Orange waveform with a slash | **Muted.** Hears only "start listening" and "Hey Claude". |
+| 🔵 Blue speaker | Reading aloud. Your dictation is paused so the mic doesn't transcribe the Mac's own voice; say "stop" to interrupt. |
 | Grey waveform with a slash | Microphone fully off. |
 | Hourglass / arrow | Starting up or downloading the speech model. |
 
@@ -239,6 +240,11 @@ mic is off (menu → Turn Mic Back On). Green but nothing appears? Make sure
 a text box is focused and the cursor is blinking. Still nothing: the menu
 will show **⚠️ Grant Accessibility Access** if macOS revoked the typing
 permission. Click it and re-enable.
+
+**I'm speaking but nothing is typed, and the icon is a blue speaker.**
+The Mac is reading an answer aloud (talk mode), and dictation pauses
+while it speaks so the mic doesn't transcribe its own voice. Say "stop"
+to interrupt the reading, then dictate normally.
 
 **It sends my message before I've finished the thought.**
 Settings → drag **Auto-send pause** right. Or turn **Auto-send** off and

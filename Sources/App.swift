@@ -79,6 +79,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             case .failed: return ("exclamationmark.triangle", .systemYellow)
             case .listening:
                 if controller.muted { return ("waveform.slash", .systemOrange) }
+                // Blue speaker while reading aloud: dictation is suppressed
+                // then (the mic would hear our own voice), and that state
+                // must be visible or "I'm talking and nothing happens".
+                if SpeechOut.shared.isSpeaking { return ("speaker.wave.2.fill", .systemBlue) }
                 return controller.speaking ? ("waveform.circle.fill", .systemRed) : ("waveform", .systemGreen)
             }
         }()
@@ -138,6 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .listening:
             if controller.muted {
                 statusText = "Muted — say “start listening” to resume"
+            } else if SpeechOut.shared.isSpeaking {
+                statusText = "Reading aloud — say “stop” to interrupt"
             } else {
                 statusText = Defaults.anyApp ? "Listening (types into any app)" : "Listening (allowlisted apps only)"
             }

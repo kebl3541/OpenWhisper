@@ -103,13 +103,27 @@ final class AnalyzerSession {
 // MARK: - Read-aloud: extract frontmost window text via AX and speak it
 
 @MainActor
-final class SpeechOut {
+final class SpeechOut: NSObject, AVSpeechSynthesizerDelegate {
     static let shared = SpeechOut()
     private let synth = AVSpeechSynthesizer()
     var isSpeaking: Bool { synth.isSpeaking }
+    private var lastActivityAt = Date.distantPast
+
+    private override init() {
+        super.init()
+        synth.delegate = self
+    }
 
     /// Bumped on every stop; streaming readers abort when it changes.
     private(set) var generation = 0
+
+    /// True while speaking and for a short tail afterwards, including the
+    /// gaps between queued chunks. Dictation gates must use THIS, not
+    /// isSpeaking: the mic hears our own TTS, and an inter-chunk gap once
+    /// let the spoken answer's own words register as a mute command.
+    var recentlySpeaking: Bool {
+        isSpeaking || Date().timeIntervalSince(lastActivityAt) < 1.5
+    }
 
     func speak(_ text: String) {
         stop()
@@ -117,6 +131,7 @@ final class SpeechOut {
     }
 
     func enqueue(_ text: String) {
+        lastActivityAt = Date()
         let utt = AVSpeechUtterance(string: text)
         if let v = Self.bestVoice(for: text) { utt.voice = v }
         synth.speak(utt)
@@ -124,7 +139,17 @@ final class SpeechOut {
 
     func stop() {
         generation += 1
+        lastActivityAt = Date()
         synth.stopSpeaking(at: .immediate)
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+                                       didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in SpeechOut.shared.lastActivityAt = Date() }
+    }
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+                                       didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in SpeechOut.shared.lastActivityAt = Date() }
     }
 
     static func bestVoice(for text: String) -> AVSpeechSynthesisVoice? {

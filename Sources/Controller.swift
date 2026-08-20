@@ -591,7 +591,10 @@ final class ListeningController {
             }
             volatilePreview = text
             // Instant stop: don't wait for the phrase to finalize.
-            if SpeechOut.shared.isSpeaking {
+            // recentlySpeaking (not isSpeaking) so the gaps between queued
+            // TTS chunks don't let our own spoken words through — a read
+            // answer once muted the app through exactly that gap.
+            if SpeechOut.shared.recentlySpeaking {
                 let v = normalizeCommand(text)
                 if v.contains("stop") || v.contains("shut up") || v.contains("quiet") || v.contains("silence") {
                     DLog.log("instant stop (volatile)")
@@ -611,7 +614,7 @@ final class ListeningController {
             }
             // React to "Hey Claude" from the live partial transcript — don't
             // wait for finalization. The final still handles text carry-over.
-            if !muted, !SpeechOut.shared.isSpeaking,
+            if !muted, !SpeechOut.shared.recentlySpeaking,
                wakeRemainder(of: text) != nil,
                Date().timeIntervalSince(lastWakeActivation) > 3,
                !frontmostIsWakeTarget() {
@@ -638,9 +641,9 @@ final class ListeningController {
 
         let command = normalizeCommand(cleaned)
         let parsed = TextProcessing.parseCommand(command)
-        // While the Mac itself is speaking, the mic may be hearing our own
-        // voice — accept only "stop", ignore everything else.
-        if SpeechOut.shared.isSpeaking {
+        // While the Mac itself is speaking (or just finished), the mic may
+        // be hearing our own voice — accept only "stop", ignore the rest.
+        if SpeechOut.shared.recentlySpeaking {
             if parsed == .stopRead {
                 DLog.log("voice command: stop reading")
                 SpeechOut.shared.stop()
@@ -920,7 +923,10 @@ final class ListeningController {
                 DLog.log("commit: dropped (\(chosen.count) chars — typing not possible here)")
             }
         }
-        if canType, force || (Defaults.effectiveAutoReturn && !chosen.isEmpty) {
+        // Auto-Return only in allowlisted apps, as documented — Return can
+        // execute, submit, or send in arbitrary apps. "send it" (force)
+        // works anywhere; anyApp mode only widens where TEXT goes.
+        if canType, force || (Defaults.effectiveAutoReturn && isAllowedFrontmost() && !chosen.isEmpty) {
             DLog.log("commit: pressing Return")
             Typist.pressReturn()
             if (pendingReadAfterSend || Defaults.talkMode), !typedThisUtterance.isEmpty {
