@@ -5,6 +5,9 @@ on:
   push:
     tags: ["v*"]
 
+concurrency:
+  group: release
+
 permissions:
   contents: write
 
